@@ -1,0 +1,64 @@
+# Git
+.git
+.gitignore
+.github
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# IDE and Editor files
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Dependencies
+vendor/
+
+# Build artifacts
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+main
+
+# Test files
+*_test.go
+**/*_test.go
+testdata/
+coverage.out
+coverage.html
+
+# Documentation
+*.md
+!README.md
+docs/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.log
+logs/
+
+# Node modules (if any frontend tooling)
+node_modules/
+
+# Database files
+*.db
+*.sqlite
+*.sql
+
+# Misc
+.air.toml
+Makefile
+docker-compose*.yml
+Dockerfile*
