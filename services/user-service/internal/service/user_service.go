@@ -36,6 +36,9 @@ type UserService interface {
 
 	// UpdateProfile updates user profile information
 	UpdateProfile(ctx context.Context, userID string, name, phone string) (*model.User, error)
+
+	// ValidateToken validates a JWT token and returns the user ID
+	ValidateToken(tokenString string) (string, error)
 }
 
 // userService implements the UserService interface

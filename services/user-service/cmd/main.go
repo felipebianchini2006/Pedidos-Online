@@ -18,6 +18,10 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 
 	"pedidos-online/user-service/internal/config"
+	"pedidos-online/user-service/internal/handler"
+	"pedidos-online/user-service/internal/middleware"
+	"pedidos-online/user-service/internal/repository"
+	"pedidos-online/user-service/internal/service"
 )
 
 func main() {
@@ -127,6 +131,17 @@ func setupMiddlewares(app *fiber.App, cfg *config.Config) {
 
 // setupRoutes configures all routes for the application
 func setupRoutes(app *fiber.App, db *sql.DB, cfg *config.Config) {
+	// Initialize layers
+	userRepo := repository.NewUserRepository(db)
+	userService := service.NewUserService(userRepo, cfg.JWTSecret, cfg.JWTExpiration)
+	userHandler := handler.NewUserHandler(userService)
+
+	// Create auth middleware
+	authMiddleware := middleware.AuthMiddleware(userService)
+
+	// Register user routes
+	handler.RegisterRoutes(app, userHandler, authMiddleware)
+
 	// Health check endpoint
 	app.Get("/health", func(c *fiber.Ctx) error {
 		// Check database connection
@@ -168,44 +183,6 @@ func setupRoutes(app *fiber.App, db *sql.DB, cfg *config.Config) {
 			"success": true,
 			"ready":   true,
 			"service": "user-service",
-		})
-	})
-
-	// API routes
-	api := app.Group("/api/v1")
-
-	// Public routes (no authentication required)
-	api.Post("/register", func(c *fiber.Ctx) error {
-		return c.Status(fiber.StatusNotImplemented).JSON(fiber.Map{
-			"success": false,
-			"error":   "endpoint not implemented yet",
-			"message": "Please implement the register handler",
-		})
-	})
-
-	api.Post("/login", func(c *fiber.Ctx) error {
-		return c.Status(fiber.StatusNotImplemented).JSON(fiber.Map{
-			"success": false,
-			"error":   "endpoint not implemented yet",
-			"message": "Please implement the login handler",
-		})
-	})
-
-	// Protected routes (authentication required)
-	// TODO: Add authentication middleware
-	api.Get("/profile", func(c *fiber.Ctx) error {
-		return c.Status(fiber.StatusNotImplemented).JSON(fiber.Map{
-			"success": false,
-			"error":   "endpoint not implemented yet",
-			"message": "Please implement the profile handler",
-		})
-	})
-
-	api.Put("/profile", func(c *fiber.Ctx) error {
-		return c.Status(fiber.StatusNotImplemented).JSON(fiber.Map{
-			"success": false,
-			"error":   "endpoint not implemented yet",
-			"message": "Please implement the update profile handler",
 		})
 	})
 
