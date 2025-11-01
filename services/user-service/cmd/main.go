@@ -136,8 +136,8 @@ func setupRoutes(app *fiber.App, db *sql.DB, cfg *config.Config) {
 	userService := service.NewUserService(userRepo, cfg.JWTSecret, cfg.JWTExpiration)
 	userHandler := handler.NewUserHandler(userService)
 
-	// Create auth middleware
-	authMiddleware := middleware.AuthMiddleware(userService)
+	// Create auth middleware (usando JWT secret diretamente)
+	authMiddleware := middleware.AuthMiddleware(cfg.JWTSecret)
 
 	// Register user routes
 	handler.RegisterRoutes(app, userHandler, authMiddleware)
