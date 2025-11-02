@@ -549,11 +549,11 @@ func RegisterRoutes(app *fiber.App, handler *OrderHandler, authMiddleware fiber.
 	orders.Use(authMiddleware)
 
 	// Rotas
-	orders.Post("/", handler.CreateOrder)             // Criar pedido
-	orders.Get("/", handler.ListOrders)               // Listar pedidos do usuário
-	orders.Get("/:id", handler.GetOrder)              // Obter pedido específico
-	orders.Put("/:id/status", handler.UpdateStatus)   // Atualizar status (admin)
-	orders.Delete("/:id", handler.CancelOrder)        // Cancelar pedido (usuário)
+	orders.Post("/", handler.CreateOrder)           // Criar pedido
+	orders.Get("/", handler.ListOrders)             // Listar pedidos do usuário
+	orders.Get("/:id", handler.GetOrder)            // Obter pedido específico
+	orders.Put("/:id/status", handler.UpdateStatus) // Atualizar status (admin)
+	orders.Delete("/:id", handler.CancelOrder)      // Cancelar pedido (usuário)
 
 	log.Println("✅ Rotas do Order Service registradas:")
 	log.Println("   POST   /api/v1/orders           - Criar pedido")
