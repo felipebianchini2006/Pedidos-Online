@@ -11,18 +11,17 @@ import (
 
 	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v2"
-	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 // OrderHandler gerencia as requisições HTTP para pedidos
 type OrderHandler struct {
-	repo      *repository.OrderRepository
+	repo      repository.OrderRepository
 	validator *validator.Validate
 	publisher *rabbitmq.Publisher
 }
 
 // NewOrderHandler cria uma nova instância do handler
-func NewOrderHandler(repo *repository.OrderRepository, publisher *rabbitmq.Publisher) *OrderHandler {
+func NewOrderHandler(repo repository.OrderRepository, publisher *rabbitmq.Publisher) *OrderHandler {
 	return &OrderHandler{
 		repo:      repo,
 		validator: validator.New(),
@@ -102,7 +101,7 @@ func (h *OrderHandler) CreateOrder(c *fiber.Ctx) error {
 }
 
 // GetOrders retorna todos os pedidos do usuário autenticado
-// GET /api/v1/orders
+// GET /api/v1/orders?page=1&limit=10
 func (h *OrderHandler) GetOrders(c *fiber.Ctx) error {
 	userID := middleware.GetUserID(c)
 	if userID == "" {
@@ -112,7 +111,15 @@ func (h *OrderHandler) GetOrders(c *fiber.Ctx) error {
 		})
 	}
 
-	orders, err := h.repo.FindByUserID(c.Context(), userID)
+	// Parâmetros de paginação
+	page := c.QueryInt("page", 1)
+	limit := c.QueryInt("limit", 10)
+
+	// Calcular skip
+	skip := (page - 1) * limit
+
+	// Buscar pedidos com paginação
+	orders, err := h.repo.FindByUserID(c.Context(), userID, limit, skip)
 	if err != nil {
 		log.Printf("❌ Erro ao buscar pedidos: %v", err)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -121,9 +128,21 @@ func (h *OrderHandler) GetOrders(c *fiber.Ctx) error {
 		})
 	}
 
+	// Contar total de pedidos
+	total, err := h.repo.Count(c.Context(), userID)
+	if err != nil {
+		log.Printf("⚠️  Erro ao contar pedidos: %v", err)
+		total = 0 // não falhar por isso
+	}
+
 	return c.JSON(fiber.Map{
 		"success": true,
 		"data":    orders,
+		"pagination": fiber.Map{
+			"page":  page,
+			"limit": limit,
+			"total": total,
+		},
 	})
 }
 
@@ -139,14 +158,7 @@ func (h *OrderHandler) GetOrderByID(c *fiber.Ctx) error {
 	}
 
 	// Parse do ID
-	idParam := c.Params("id")
-	orderID, err := primitive.ObjectIDFromHex(idParam)
-	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"success": false,
-			"error":   "ID inválido",
-		})
-	}
+	orderID := c.Params("id")
 
 	// Buscar pedido
 	order, err := h.repo.FindByID(c.Context(), orderID)
@@ -175,14 +187,7 @@ func (h *OrderHandler) GetOrderByID(c *fiber.Ctx) error {
 // PUT /api/v1/orders/:id/status
 func (h *OrderHandler) UpdateOrderStatus(c *fiber.Ctx) error {
 	// Parse do ID
-	idParam := c.Params("id")
-	orderID, err := primitive.ObjectIDFromHex(idParam)
-	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"success": false,
-			"error":   "ID inválido",
-		})
-	}
+	orderID := c.Params("id")
 
 	// Parse do body
 	var req model.UpdateOrderStatusRequest

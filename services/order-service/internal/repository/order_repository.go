@@ -13,22 +13,49 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-// OrderRepository gerencia operações de banco de dados para pedidos
-type OrderRepository struct {
+// OrderRepository define a interface para operações de pedidos
+type OrderRepository interface {
+	// Create insere um novo pedido no banco de dados
+	Create(ctx context.Context, order *model.Order) error
+
+	// FindByID busca um pedido pelo ID
+	FindByID(ctx context.Context, id string) (*model.Order, error)
+
+	// FindByUserID busca pedidos de um usuário com paginação
+	FindByUserID(ctx context.Context, userID string, limit, skip int) ([]*model.Order, error)
+
+	// Update atualiza um pedido completo
+	Update(ctx context.Context, order *model.Order) error
+
+	// UpdateStatus atualiza apenas o status de um pedido
+	UpdateStatus(ctx context.Context, id, status string) error
+
+	// Delete remove um pedido do banco de dados
+	Delete(ctx context.Context, id string) error
+
+	// Count retorna o total de pedidos de um usuário
+	Count(ctx context.Context, userID string) (int64, error)
+
+	// CreateIndexes cria os índices necessários
+	CreateIndexes(ctx context.Context) error
+}
+
+// orderRepository implementa a interface OrderRepository
+type orderRepository struct {
 	collection *mongo.Collection
 	timeout    time.Duration
 }
 
 // NewOrderRepository cria uma nova instância do repositório
-func NewOrderRepository(db *mongo.Database, timeout time.Duration) *OrderRepository {
-	return &OrderRepository{
+func NewOrderRepository(db *mongo.Database) OrderRepository {
+	return &orderRepository{
 		collection: db.Collection("orders"),
-		timeout:    timeout,
+		timeout:    10 * time.Second, // timeout padrão de 10 segundos
 	}
 }
 
 // Create insere um novo pedido no banco de dados
-func (r *OrderRepository) Create(ctx context.Context, order *model.Order) error {
+func (r *orderRepository) Create(ctx context.Context, order *model.Order) error {
 	ctx, cancel := context.WithTimeout(ctx, r.timeout)
 	defer cancel()
 
@@ -50,12 +77,18 @@ func (r *OrderRepository) Create(ctx context.Context, order *model.Order) error 
 }
 
 // FindByID busca um pedido pelo ID
-func (r *OrderRepository) FindByID(ctx context.Context, id primitive.ObjectID) (*model.Order, error) {
+func (r *orderRepository) FindByID(ctx context.Context, id string) (*model.Order, error) {
 	ctx, cancel := context.WithTimeout(ctx, r.timeout)
 	defer cancel()
 
+	// Validar e converter ObjectID
+	objectID, err := primitive.ObjectIDFromHex(id)
+	if err != nil {
+		return nil, fmt.Errorf("ID inválido: %w", err)
+	}
+
 	var order model.Order
-	err := r.collection.FindOne(ctx, bson.M{"_id": id}).Decode(&order)
+	err = r.collection.FindOne(ctx, bson.M{"_id": objectID}).Decode(&order)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			return nil, fmt.Errorf("pedido não encontrado")
@@ -66,13 +99,27 @@ func (r *OrderRepository) FindByID(ctx context.Context, id primitive.ObjectID) (
 	return &order, nil
 }
 
-// FindByUserID busca todos os pedidos de um usuário
-func (r *OrderRepository) FindByUserID(ctx context.Context, userID string) ([]*model.Order, error) {
+// FindByUserID busca pedidos de um usuário com paginação
+func (r *orderRepository) FindByUserID(ctx context.Context, userID string, limit, skip int) ([]*model.Order, error) {
 	ctx, cancel := context.WithTimeout(ctx, r.timeout)
 	defer cancel()
 
-	// Ordenar por data de criação decrescente (mais recentes primeiro)
-	opts := options.Find().SetSort(bson.D{{Key: "created_at", Value: -1}})
+	// Validar parâmetros de paginação
+	if limit <= 0 {
+		limit = 10 // limite padrão
+	}
+	if limit > 100 {
+		limit = 100 // limite máximo
+	}
+	if skip < 0 {
+		skip = 0
+	}
+
+	// Configurar opções de busca
+	opts := options.Find().
+		SetSort(bson.D{{Key: "created_at", Value: -1}}). // mais recentes primeiro
+		SetLimit(int64(limit)).
+		SetSkip(int64(skip))
 
 	cursor, err := r.collection.Find(ctx, bson.M{"user_id": userID}, opts)
 	if err != nil {
@@ -85,13 +132,69 @@ func (r *OrderRepository) FindByUserID(ctx context.Context, userID string) ([]*m
 		return nil, fmt.Errorf("erro ao decodificar pedidos: %w", err)
 	}
 
+	// Retornar lista vazia ao invés de nil se não houver pedidos
+	if orders == nil {
+		orders = []*model.Order{}
+	}
+
 	return orders, nil
 }
 
-// UpdateStatus atualiza o status de um pedido
-func (r *OrderRepository) UpdateStatus(ctx context.Context, id primitive.ObjectID, status string) error {
+// Update atualiza um pedido completo
+func (r *orderRepository) Update(ctx context.Context, order *model.Order) error {
 	ctx, cancel := context.WithTimeout(ctx, r.timeout)
 	defer cancel()
+
+	// Atualizar timestamp
+	order.UpdatedAt = time.Now()
+
+	// Preparar update
+	update := bson.M{
+		"$set": bson.M{
+			"items":        order.Items,
+			"total_amount": order.TotalAmount,
+			"status":       order.Status,
+			"address":      order.Address,
+			"updated_at":   order.UpdatedAt,
+		},
+	}
+
+	result, err := r.collection.UpdateOne(ctx, bson.M{"_id": order.ID}, update)
+	if err != nil {
+		return fmt.Errorf("erro ao atualizar pedido: %w", err)
+	}
+
+	if result.MatchedCount == 0 {
+		return fmt.Errorf("pedido não encontrado")
+	}
+
+	return nil
+}
+
+// UpdateStatus atualiza apenas o status de um pedido
+func (r *orderRepository) UpdateStatus(ctx context.Context, id, status string) error {
+	ctx, cancel := context.WithTimeout(ctx, r.timeout)
+	defer cancel()
+
+	// Validar ObjectID
+	objectID, err := primitive.ObjectIDFromHex(id)
+	if err != nil {
+		return fmt.Errorf("ID inválido: %w", err)
+	}
+
+	// Validar status
+	validStatuses := map[string]bool{
+		model.OrderStatusPending:   true,
+		model.OrderStatusConfirmed: true,
+		model.OrderStatusPreparing: true,
+		model.OrderStatusShipped:   true,
+		model.OrderStatusDelivered: true,
+		model.OrderStatusCancelled: true,
+	}
+
+	if !validStatuses[status] {
+		return fmt.Errorf("status inválido: %s", status)
+	}
 
 	update := bson.M{
 		"$set": bson.M{
@@ -100,7 +203,7 @@ func (r *OrderRepository) UpdateStatus(ctx context.Context, id primitive.ObjectI
 		},
 	}
 
-	result, err := r.collection.UpdateOne(ctx, bson.M{"_id": id}, update)
+	result, err := r.collection.UpdateOne(ctx, bson.M{"_id": objectID}, update)
 	if err != nil {
 		return fmt.Errorf("erro ao atualizar status do pedido: %w", err)
 	}
@@ -112,12 +215,18 @@ func (r *OrderRepository) UpdateStatus(ctx context.Context, id primitive.ObjectI
 	return nil
 }
 
-// Delete remove um pedido (soft delete seria melhor em produção)
-func (r *OrderRepository) Delete(ctx context.Context, id primitive.ObjectID) error {
+// Delete remove um pedido do banco de dados
+func (r *orderRepository) Delete(ctx context.Context, id string) error {
 	ctx, cancel := context.WithTimeout(ctx, r.timeout)
 	defer cancel()
 
-	result, err := r.collection.DeleteOne(ctx, bson.M{"_id": id})
+	// Validar ObjectID
+	objectID, err := primitive.ObjectIDFromHex(id)
+	if err != nil {
+		return fmt.Errorf("ID inválido: %w", err)
+	}
+
+	result, err := r.collection.DeleteOne(ctx, bson.M{"_id": objectID})
 	if err != nil {
 		return fmt.Errorf("erro ao deletar pedido: %w", err)
 	}
@@ -129,35 +238,53 @@ func (r *OrderRepository) Delete(ctx context.Context, id primitive.ObjectID) err
 	return nil
 }
 
+// Count retorna o total de pedidos de um usuário
+func (r *orderRepository) Count(ctx context.Context, userID string) (int64, error) {
+	ctx, cancel := context.WithTimeout(ctx, r.timeout)
+	defer cancel()
+
+	count, err := r.collection.CountDocuments(ctx, bson.M{"user_id": userID})
+	if err != nil {
+		return 0, fmt.Errorf("erro ao contar pedidos: %w", err)
+	}
+
+	return count, nil
+}
+
 // CreateIndexes cria índices necessários na collection
-func (r *OrderRepository) CreateIndexes(ctx context.Context) error {
+func (r *orderRepository) CreateIndexes(ctx context.Context) error {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
 	// Índice em user_id (para buscar pedidos do usuário)
 	userIDIndex := mongo.IndexModel{
-		Keys: bson.D{{Key: "user_id", Value: 1}},
+		Keys:    bson.D{{Key: "user_id", Value: 1}},
+		Options: options.Index().SetName("idx_user_id"),
 	}
 
-	// Índice em created_at descendente (para ordenação)
+	// Índice em created_at descendente (para ordenação por data)
 	createdAtIndex := mongo.IndexModel{
-		Keys: bson.D{{Key: "created_at", Value: -1}},
+		Keys:    bson.D{{Key: "created_at", Value: -1}},
+		Options: options.Index().SetName("idx_created_at"),
 	}
 
 	// Índice em status (para filtrar por status)
 	statusIndex := mongo.IndexModel{
-		Keys: bson.D{{Key: "status", Value: 1}},
+		Keys:    bson.D{{Key: "status", Value: 1}},
+		Options: options.Index().SetName("idx_status"),
 	}
 
-	// Índice composto user_id + created_at (otimiza busca de pedidos do usuário)
+	// Índice composto user_id + created_at (otimiza busca paginada de pedidos do usuário)
 	compositeIndex := mongo.IndexModel{
 		Keys: bson.D{
 			{Key: "user_id", Value: 1},
 			{Key: "created_at", Value: -1},
 		},
+		Options: options.Index().SetName("idx_user_created"),
 	}
 
-	_, err := r.collection.Indexes().CreateMany(ctx, []mongo.IndexModel{
+	// Criar todos os índices
+	indexNames, err := r.collection.Indexes().CreateMany(ctx, []mongo.IndexModel{
 		userIDIndex,
 		createdAtIndex,
 		statusIndex,
@@ -167,6 +294,9 @@ func (r *OrderRepository) CreateIndexes(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("erro ao criar índices: %w", err)
 	}
+
+	// Log dos índices criados (opcional)
+	_ = indexNames // índices criados com sucesso
 
 	return nil
 }

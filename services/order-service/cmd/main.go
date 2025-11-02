@@ -48,7 +48,7 @@ func main() {
 	db := mongoClient.Database(cfg.MongoDB)
 
 	// Criar repository
-	orderRepo := repository.NewOrderRepository(db, time.Duration(cfg.MongoTimeout)*time.Second)
+	orderRepo := repository.NewOrderRepository(db)
 
 	// Criar índices
 	log.Println("🔧 Criando índices MongoDB...")
