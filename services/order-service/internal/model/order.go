@@ -55,8 +55,13 @@ func (o *Order) CalculateTotal() {
 	o.TotalAmount = total
 }
 
-// IsValidStatus verifica se o status é válido
+// IsValidStatus verifica se o status da ordem é válido
 func (o *Order) IsValidStatus() bool {
+	return IsValidStatus(o.Status)
+}
+
+// IsValidStatus verifica se o status fornecido é um dos valores permitidos
+func IsValidStatus(status string) bool {
 	validStatuses := []string{
 		OrderStatusPending,
 		OrderStatusConfirmed,
@@ -67,7 +72,7 @@ func (o *Order) IsValidStatus() bool {
 	}
 
 	for _, validStatus := range validStatuses {
-		if o.Status == validStatus {
+		if status == validStatus {
 			return true
 		}
 	}

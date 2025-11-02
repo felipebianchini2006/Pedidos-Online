@@ -21,6 +21,7 @@ import (
 	"pedidos-online/order-service/internal/middleware"
 	"pedidos-online/order-service/internal/queue"
 	"pedidos-online/order-service/internal/repository"
+	"pedidos-online/order-service/internal/service"
 )
 
 func main() {
@@ -66,8 +67,13 @@ func main() {
 	}
 	defer publisher.Close()
 
+	// Criar service layer
+	log.Println("📦 Inicializando service layer...")
+	orderService := service.NewOrderService(orderRepo, publisher)
+	log.Println("✅ Service layer inicializado")
+
 	// Criar handler
-	orderHandler := handler.NewOrderHandler(orderRepo, publisher)
+	orderHandler := handler.NewOrderHandler(orderService)
 
 	// Inicializar Fiber
 	app := fiber.New(fiber.Config{
@@ -133,19 +139,21 @@ func main() {
 	orders.Post("/", orderHandler.CreateOrder)                // Criar pedido
 	orders.Get("/", orderHandler.GetOrders)                   // Listar pedidos do usuário
 	orders.Get("/:id", orderHandler.GetOrderByID)             // Obter pedido específico
-	orders.Put("/:id/status", orderHandler.UpdateOrderStatus) // Atualizar status
+	orders.Put("/:id/status", orderHandler.UpdateOrderStatus) // Atualizar status (admin)
+	orders.Put("/:id/cancel", orderHandler.CancelOrder)       // Cancelar pedido (usuário)
 
 	// Iniciar servidor em goroutine
 	go func() {
 		addr := fmt.Sprintf(":%s", cfg.Port)
 		log.Printf("🚀 Order Service rodando na porta %s", cfg.Port)
 		log.Printf("📍 Endpoints disponíveis:")
-		log.Printf("   GET  /               - Info do serviço")
-		log.Printf("   GET  /health         - Health check")
-		log.Printf("   POST /api/v1/orders  - Criar pedido (autenticado)")
-		log.Printf("   GET  /api/v1/orders  - Listar pedidos (autenticado)")
-		log.Printf("   GET  /api/v1/orders/:id - Obter pedido (autenticado)")
-		log.Printf("   PUT  /api/v1/orders/:id/status - Atualizar status")
+		log.Printf("   GET  /                         - Info do serviço")
+		log.Printf("   GET  /health                   - Health check")
+		log.Printf("   POST /api/v1/orders            - Criar pedido (autenticado)")
+		log.Printf("   GET  /api/v1/orders            - Listar pedidos (autenticado)")
+		log.Printf("   GET  /api/v1/orders/:id        - Obter pedido (autenticado)")
+		log.Printf("   PUT  /api/v1/orders/:id/status - Atualizar status (admin)")
+		log.Printf("   PUT  /api/v1/orders/:id/cancel - Cancelar pedido (autenticado)")
 
 		if err := app.Listen(addr); err != nil {
 			log.Fatalf("❌ Erro ao iniciar servidor: %v", err)

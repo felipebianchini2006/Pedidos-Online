@@ -5,26 +5,20 @@ import (
 
 	"pedidos-online/order-service/internal/middleware"
 	"pedidos-online/order-service/internal/model"
-	"pedidos-online/order-service/internal/queue"
-	"pedidos-online/order-service/internal/repository"
+	"pedidos-online/order-service/internal/service"
 
-	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v2"
 )
 
 // OrderHandler gerencia as requisições HTTP para pedidos
 type OrderHandler struct {
-	repo      repository.OrderRepository
-	validator *validator.Validate
-	publisher *queue.Publisher
+	service service.OrderService
 }
 
 // NewOrderHandler cria uma nova instância do handler
-func NewOrderHandler(repo repository.OrderRepository, publisher *queue.Publisher) *OrderHandler {
+func NewOrderHandler(svc service.OrderService) *OrderHandler {
 	return &OrderHandler{
-		repo:      repo,
-		validator: validator.New(),
-		publisher: publisher,
+		service: svc,
 	}
 }
 
@@ -45,42 +39,18 @@ func (h *OrderHandler) CreateOrder(c *fiber.Ctx) error {
 	if err := c.BodyParser(&req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"success": false,
-			"error":   "Dados inválidos",
+			"error":   "Dados inválidos: " + err.Error(),
 		})
 	}
 
-	// Validar request
-	if err := h.validator.Struct(req); err != nil {
+	// Criar pedido usando service layer
+	order, err := h.service.CreateOrder(c.Context(), userID, req.Items, req.Address)
+	if err != nil {
+		log.Printf("❌ Erro ao criar pedido: %v", err)
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"success": false,
 			"error":   err.Error(),
 		})
-	}
-
-	// Criar ordem
-	order := &model.Order{
-		UserID:  userID,
-		Items:   req.Items,
-		Status:  model.OrderStatusPending,
-		Address: req.Address,
-	}
-
-	// Calcular total
-	order.CalculateTotal()
-
-	// Salvar no banco
-	if err := h.repo.Create(c.Context(), order); err != nil {
-		log.Printf("❌ Erro ao criar pedido: %v", err)
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"success": false,
-			"error":   "Erro ao criar pedido",
-		})
-	}
-
-	// Publicar evento order.created no RabbitMQ
-	if err := h.publisher.PublishOrderCreated(order); err != nil {
-		log.Printf("⚠️  Erro ao publicar evento order.created: %v", err)
-		// Não retornar erro, pois o pedido foi criado com sucesso
 	}
 
 	return c.Status(fiber.StatusCreated).JSON(fiber.Map{
@@ -91,7 +61,7 @@ func (h *OrderHandler) CreateOrder(c *fiber.Ctx) error {
 }
 
 // GetOrders retorna todos os pedidos do usuário autenticado
-// GET /api/v1/orders?page=1&limit=10
+// GET /api/v1/orders?page=1&page_size=10
 func (h *OrderHandler) GetOrders(c *fiber.Ctx) error {
 	userID := middleware.GetUserID(c)
 	if userID == "" {
@@ -103,35 +73,26 @@ func (h *OrderHandler) GetOrders(c *fiber.Ctx) error {
 
 	// Parâmetros de paginação
 	page := c.QueryInt("page", 1)
-	limit := c.QueryInt("limit", 10)
+	pageSize := c.QueryInt("page_size", 10)
 
-	// Calcular skip
-	skip := (page - 1) * limit
-
-	// Buscar pedidos com paginação
-	orders, err := h.repo.FindByUserID(c.Context(), userID, limit, skip)
+	// Listar pedidos usando service layer
+	orders, total, err := h.service.ListOrders(c.Context(), userID, page, pageSize)
 	if err != nil {
-		log.Printf("❌ Erro ao buscar pedidos: %v", err)
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+		log.Printf("❌ Erro ao listar pedidos: %v", err)
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"success": false,
-			"error":   "Erro ao buscar pedidos",
+			"error":   err.Error(),
 		})
-	}
-
-	// Contar total de pedidos
-	total, err := h.repo.Count(c.Context(), userID)
-	if err != nil {
-		log.Printf("⚠️  Erro ao contar pedidos: %v", err)
-		total = 0 // não falhar por isso
 	}
 
 	return c.JSON(fiber.Map{
 		"success": true,
 		"data":    orders,
 		"pagination": fiber.Map{
-			"page":  page,
-			"limit": limit,
-			"total": total,
+			"page":        page,
+			"page_size":   pageSize,
+			"total":       total,
+			"total_pages": (total + int64(pageSize) - 1) / int64(pageSize),
 		},
 	})
 }
@@ -150,20 +111,19 @@ func (h *OrderHandler) GetOrderByID(c *fiber.Ctx) error {
 	// Parse do ID
 	orderID := c.Params("id")
 
-	// Buscar pedido
-	order, err := h.repo.FindByID(c.Context(), orderID)
+	// Buscar pedido usando service layer
+	order, err := h.service.GetOrder(c.Context(), orderID, userID)
 	if err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-			"success": false,
-			"error":   "Pedido não encontrado",
-		})
-	}
+		statusCode := fiber.StatusBadRequest
+		if err.Error() == "pedido não encontrado" {
+			statusCode = fiber.StatusNotFound
+		} else if err.Error() == "acesso negado a este pedido" {
+			statusCode = fiber.StatusForbidden
+		}
 
-	// Verificar se o pedido pertence ao usuário
-	if order.UserID != userID {
-		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+		return c.Status(statusCode).JSON(fiber.Map{
 			"success": false,
-			"error":   "Acesso negado a este pedido",
+			"error":   err.Error(),
 		})
 	}
 
@@ -184,52 +144,63 @@ func (h *OrderHandler) UpdateOrderStatus(c *fiber.Ctx) error {
 	if err := c.BodyParser(&req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"success": false,
-			"error":   "Dados inválidos",
+			"error":   "Dados inválidos: " + err.Error(),
 		})
 	}
 
-	// Validar request
-	if err := h.validator.Struct(req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+	// Atualizar status usando service layer
+	_, err := h.service.UpdateOrderStatus(c.Context(), orderID, req.Status)
+	if err != nil {
+		log.Printf("❌ Erro ao atualizar status: %v", err)
+		statusCode := fiber.StatusBadRequest
+		if err.Error() == "pedido não encontrado" {
+			statusCode = fiber.StatusNotFound
+		}
+
+		return c.Status(statusCode).JSON(fiber.Map{
 			"success": false,
 			"error":   err.Error(),
 		})
 	}
 
-	// Buscar pedido atual
-	order, err := h.repo.FindByID(c.Context(), orderID)
-	if err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+	return c.JSON(fiber.Map{
+		"success": true,
+		"message": "Status atualizado com sucesso",
+	})
+}
+
+// CancelOrder cancela um pedido
+// PUT /api/v1/orders/:id/cancel
+func (h *OrderHandler) CancelOrder(c *fiber.Ctx) error {
+	userID := middleware.GetUserID(c)
+	if userID == "" {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 			"success": false,
-			"error":   "Pedido não encontrado",
+			"error":   "Usuário não autenticado",
 		})
 	}
 
-	// Validar transição de status
-	if !order.CanTransitionTo(req.Status) {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"success": false,
-			"error":   "Transição de status inválida",
-			"message": "Não é possível mudar de '" + order.Status + "' para '" + req.Status + "'",
-		})
-	}
+	// Parse do ID
+	orderID := c.Params("id")
 
-	// Atualizar status
-	if err := h.repo.UpdateStatus(c.Context(), orderID, req.Status); err != nil {
-		log.Printf("❌ Erro ao atualizar status: %v", err)
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"success": false,
-			"error":   "Erro ao atualizar status",
-		})
-	}
+	// Cancelar pedido usando service layer
+	if err := h.service.CancelOrder(c.Context(), orderID, userID); err != nil {
+		log.Printf("❌ Erro ao cancelar pedido: %v", err)
+		statusCode := fiber.StatusBadRequest
+		if err.Error() == "pedido não encontrado" {
+			statusCode = fiber.StatusNotFound
+		} else if err.Error() == "acesso negado a este pedido" {
+			statusCode = fiber.StatusForbidden
+		}
 
-	// Publicar evento order.updated no RabbitMQ
-	if err := h.publisher.PublishOrderUpdated(orderID, order.Status, req.Status); err != nil {
-		log.Printf("⚠️  Erro ao publicar evento order.updated: %v", err)
+		return c.Status(statusCode).JSON(fiber.Map{
+			"success": false,
+			"error":   err.Error(),
+		})
 	}
 
 	return c.JSON(fiber.Map{
 		"success": true,
-		"message": "Status atualizado com sucesso",
+		"message": "Pedido cancelado com sucesso",
 	})
 }

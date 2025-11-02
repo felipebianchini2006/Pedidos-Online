@@ -20,13 +20,13 @@ type Publisher struct {
 
 // OrderCreatedEvent representa o evento de pedido criado
 type OrderCreatedEvent struct {
-	OrderID     string             `json:"order_id"`
-	UserID      string             `json:"user_id"`
-	Items       []model.OrderItem  `json:"items"`
-	TotalAmount float64            `json:"total_amount"`
-	Status      string             `json:"status"`
-	Address     model.Address      `json:"address"`
-	CreatedAt   time.Time          `json:"created_at"`
+	OrderID     string            `json:"order_id"`
+	UserID      string            `json:"user_id"`
+	Items       []model.OrderItem `json:"items"`
+	TotalAmount float64           `json:"total_amount"`
+	Status      string            `json:"status"`
+	Address     model.Address     `json:"address"`
+	CreatedAt   time.Time         `json:"created_at"`
 }
 
 // OrderUpdatedEvent representa o evento de pedido atualizado
