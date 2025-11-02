@@ -103,23 +103,29 @@ func main() {
 
 	app.Get("/health", func(c *fiber.Ctx) error {
 		// Verificar MongoDB
-		mongoStatus := "healthy"
+		mongoStatus := "ok"
 		if err := mongoClient.Ping(c.Context(), nil); err != nil {
 			mongoStatus = "unhealthy"
+			log.Printf("⚠️  MongoDB health check failed: %v", err)
 		}
 
 		// Verificar RabbitMQ
-		rabbitMQStatus := "healthy"
+		rabbitMQStatus := "ok"
 		if !publisher.IsConnected() {
 			rabbitMQStatus = "unhealthy"
+			log.Printf("⚠️  RabbitMQ health check failed: not connected")
 		}
 
+		// Determinar status geral e código HTTP
 		overallStatus := "healthy"
+		statusCode := fiber.StatusOK
+
 		if mongoStatus == "unhealthy" || rabbitMQStatus == "unhealthy" {
 			overallStatus = "unhealthy"
+			statusCode = fiber.StatusServiceUnavailable // 503
 		}
 
-		return c.JSON(fiber.Map{
+		return c.Status(statusCode).JSON(fiber.Map{
 			"status":   overallStatus,
 			"service":  "order-service",
 			"version":  "1.0.0",
