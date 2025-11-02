@@ -2,12 +2,11 @@ package handler
 
 import (
 	"log"
-	"time"
 
 	"pedidos-online/order-service/internal/middleware"
 	"pedidos-online/order-service/internal/model"
+	"pedidos-online/order-service/internal/queue"
 	"pedidos-online/order-service/internal/repository"
-	"pedidos-online/order-service/pkg/rabbitmq"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v2"
@@ -17,11 +16,11 @@ import (
 type OrderHandler struct {
 	repo      repository.OrderRepository
 	validator *validator.Validate
-	publisher *rabbitmq.Publisher
+	publisher *queue.Publisher
 }
 
 // NewOrderHandler cria uma nova instância do handler
-func NewOrderHandler(repo repository.OrderRepository, publisher *rabbitmq.Publisher) *OrderHandler {
+func NewOrderHandler(repo repository.OrderRepository, publisher *queue.Publisher) *OrderHandler {
 	return &OrderHandler{
 		repo:      repo,
 		validator: validator.New(),
@@ -79,16 +78,7 @@ func (h *OrderHandler) CreateOrder(c *fiber.Ctx) error {
 	}
 
 	// Publicar evento order.created no RabbitMQ
-	event := model.OrderEvent{
-		EventType: "order.created",
-		OrderID:   order.ID.Hex(),
-		UserID:    order.UserID,
-		Status:    order.Status,
-		Total:     order.TotalAmount,
-		Timestamp: time.Now(),
-	}
-
-	if err := h.publisher.Publish("order.created", event); err != nil {
+	if err := h.publisher.PublishOrderCreated(order); err != nil {
 		log.Printf("⚠️  Erro ao publicar evento order.created: %v", err)
 		// Não retornar erro, pois o pedido foi criado com sucesso
 	}
@@ -234,16 +224,7 @@ func (h *OrderHandler) UpdateOrderStatus(c *fiber.Ctx) error {
 	}
 
 	// Publicar evento order.updated no RabbitMQ
-	event := model.OrderEvent{
-		EventType: "order.updated",
-		OrderID:   order.ID.Hex(),
-		UserID:    order.UserID,
-		Status:    req.Status,
-		Total:     order.TotalAmount,
-		Timestamp: time.Now(),
-	}
-
-	if err := h.publisher.Publish("order.updated", event); err != nil {
+	if err := h.publisher.PublishOrderUpdated(orderID, order.Status, req.Status); err != nil {
 		log.Printf("⚠️  Erro ao publicar evento order.updated: %v", err)
 	}
 

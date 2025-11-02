@@ -19,8 +19,8 @@ import (
 	"pedidos-online/order-service/internal/config"
 	"pedidos-online/order-service/internal/handler"
 	"pedidos-online/order-service/internal/middleware"
+	"pedidos-online/order-service/internal/queue"
 	"pedidos-online/order-service/internal/repository"
-	"pedidos-online/order-service/pkg/rabbitmq"
 )
 
 func main() {
@@ -60,7 +60,7 @@ func main() {
 
 	// Conectar ao RabbitMQ
 	log.Println("🐰 Conectando ao RabbitMQ...")
-	publisher, err := rabbitmq.NewPublisher(cfg.RabbitMQURL, "orders")
+	publisher, err := queue.NewPublisher(cfg.RabbitMQURL)
 	if err != nil {
 		log.Fatalf("❌ Erro ao conectar ao RabbitMQ: %v", err)
 	}
