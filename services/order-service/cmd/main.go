@@ -128,32 +128,15 @@ func main() {
 		})
 	})
 
-	// Grupo de rotas da API v1 (protegidas com autenticação)
-	api := app.Group("/api/v1")
-
-	// Aplicar middleware de autenticação
-	api.Use(middleware.AuthMiddleware(cfg.JWTSecret))
-
-	// Rotas de pedidos
-	orders := api.Group("/orders")
-	orders.Post("/", orderHandler.CreateOrder)                // Criar pedido
-	orders.Get("/", orderHandler.GetOrders)                   // Listar pedidos do usuário
-	orders.Get("/:id", orderHandler.GetOrderByID)             // Obter pedido específico
-	orders.Put("/:id/status", orderHandler.UpdateOrderStatus) // Atualizar status (admin)
-	orders.Put("/:id/cancel", orderHandler.CancelOrder)       // Cancelar pedido (usuário)
+	// Registrar rotas protegidas com autenticação JWT
+	log.Println("🔐 Registrando rotas protegidas...")
+	authMiddleware := middleware.AuthMiddleware(cfg.JWTSecret)
+	handler.RegisterRoutes(app, orderHandler, authMiddleware)
 
 	// Iniciar servidor em goroutine
 	go func() {
 		addr := fmt.Sprintf(":%s", cfg.Port)
 		log.Printf("🚀 Order Service rodando na porta %s", cfg.Port)
-		log.Printf("📍 Endpoints disponíveis:")
-		log.Printf("   GET  /                         - Info do serviço")
-		log.Printf("   GET  /health                   - Health check")
-		log.Printf("   POST /api/v1/orders            - Criar pedido (autenticado)")
-		log.Printf("   GET  /api/v1/orders            - Listar pedidos (autenticado)")
-		log.Printf("   GET  /api/v1/orders/:id        - Obter pedido (autenticado)")
-		log.Printf("   PUT  /api/v1/orders/:id/status - Atualizar status (admin)")
-		log.Printf("   PUT  /api/v1/orders/:id/cancel - Cancelar pedido (autenticado)")
 
 		if err := app.Listen(addr); err != nil {
 			log.Fatalf("❌ Erro ao iniciar servidor: %v", err)
