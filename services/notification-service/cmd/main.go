@@ -7,6 +7,7 @@ import (
 	"os/signal"
 	"pedidos-online/notification-service/internal/config"
 	"pedidos-online/notification-service/internal/email"
+	"pedidos-online/notification-service/internal/handler"
 	"pedidos-online/notification-service/internal/queue"
 	"syscall"
 	"time"
@@ -73,8 +74,13 @@ func main() {
 		AllowHeaders: "Origin, Content-Type, Accept",
 	}))
 
+	// Inicializar handlers
+	healthHandler := handler.NewHealthHandler(cfg)
+	readinessHandler := handler.NewReadinessHandler(cfg)
+	metricsHandler := handler.NewMetricsHandler()
+
 	// Rotas
-	setupRoutes(app, cfg, consumer)
+	setupRoutes(app, cfg, consumer, healthHandler, readinessHandler, metricsHandler)
 
 	// Canal para capturar sinais de shutdown
 	quit := make(chan os.Signal, 1)
@@ -112,7 +118,14 @@ func main() {
 }
 
 // setupRoutes configura as rotas da aplicação
-func setupRoutes(app *fiber.App, cfg *config.Config, consumer *queue.Consumer) {
+func setupRoutes(
+	app *fiber.App,
+	cfg *config.Config,
+	consumer *queue.Consumer,
+	healthHandler *handler.HealthHandler,
+	readinessHandler *handler.ReadinessHandler,
+	metricsHandler *handler.MetricsHandler,
+) {
 	// Root endpoint
 	app.Get("/", func(c *fiber.Ctx) error {
 		return c.JSON(fiber.Map{
@@ -120,62 +133,24 @@ func setupRoutes(app *fiber.App, cfg *config.Config, consumer *queue.Consumer) {
 			"version": cfg.ServiceVersion,
 			"status":  "running",
 			"message": "Notification Service - Sistema de envio de notificações por e-mail",
-		})
-	})
-
-	// Health check endpoint
-	app.Get("/health", func(c *fiber.Ctx) error {
-		// Verificar conexão RabbitMQ
-		rabbitMQStatus := "ok"
-		if !consumer.IsConnected() {
-			rabbitMQStatus = "unhealthy"
-			log.Printf("⚠️  RabbitMQ health check failed: not connected")
-		}
-
-		// Determinar status geral e código HTTP
-		overallStatus := "healthy"
-		statusCode := fiber.StatusOK
-
-		if rabbitMQStatus == "unhealthy" {
-			overallStatus = "unhealthy"
-			statusCode = fiber.StatusServiceUnavailable // 503
-		}
-
-		return c.Status(statusCode).JSON(fiber.Map{
-			"status":   overallStatus,
-			"service":  cfg.ServiceName,
-			"version":  cfg.ServiceVersion,
-			"rabbitmq": rabbitMQStatus,
-			"smtp": fiber.Map{
-				"host": cfg.SMTP.Host,
-				"port": cfg.SMTP.Port,
+			"endpoints": fiber.Map{
+				"health":             "/health",
+				"readiness":          "/ready",
+				"metrics_json":       "/metrics",
+				"metrics_prometheus": "/metrics/prometheus",
 			},
 		})
 	})
 
-	// Ready endpoint (Kubernetes readiness probe)
-	app.Get("/ready", func(c *fiber.Ctx) error {
-		if !consumer.IsConnected() {
-			return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
-				"ready":   false,
-				"message": "RabbitMQ não conectado",
-			})
-		}
+	// Health check endpoint (com verificações avançadas)
+	app.Get("/health", healthHandler.Health)
 
-		return c.JSON(fiber.Map{
-			"ready": true,
-		})
-	})
+	// Readiness endpoint (Kubernetes readiness probe)
+	app.Get("/ready", readinessHandler.Ready)
 
-	// Metrics endpoint (exemplo simples)
-	app.Get("/metrics", func(c *fiber.Ctx) error {
-		return c.JSON(fiber.Map{
-			"service":            cfg.ServiceName,
-			"version":            cfg.ServiceVersion,
-			"rabbitmq_connected": consumer.IsConnected(),
-			"uptime":             time.Since(startTime).String(),
-		})
-	})
+	// Metrics endpoints
+	app.Get("/metrics", metricsHandler.Metrics)
+	app.Get("/metrics/prometheus", metricsHandler.MetricsPrometheus)
 }
 
 // customErrorHandler trata erros globais da aplicação
