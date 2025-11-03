@@ -1,0 +1,43 @@
+# Binários
+api-gateway
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary
+*.test
+
+# Output da cobertura de testes
+*.out
+coverage.out
+*.coverprofile
+
+# Variáveis de ambiente
+.env
+.env.local
+.env.*.local
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+
+# Logs
+*.log
+
+# Diretórios temporários
+tmp/
+temp/
+
+# Vendor
+vendor/
