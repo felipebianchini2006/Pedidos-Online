@@ -1,0 +1,85 @@
+# Environment files (NEVER commit these!)
+.env
+.env.local
+.env.*.local
+*.env
+**/.env
+**/.env.local
+
+# Docker
+docker-compose.override.yml
+
+# Logs
+*.log
+logs/
+gateway.log
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+*.sublime-*
+
+# Go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+coverage.html
+coverage.out
+vendor/
+go.work
+
+# Node (for future frontend)
+node_modules/
+dist/
+build/
+.cache/
+*.tsbuildinfo
+
+# Database backups
+*.sql
+*.dump
+backup/
+backups/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.bak
+
+# Coverage reports
+coverage/
+
+# Binaries
+main
+user-service
+order-service
+notification-service
+api-gateway
+bin/
+
+# Certificates (if any)
+*.pem
+*.key
+*.crt
+
+# Terraform (if used in future)
+.terraform/
+*.tfstate
+*.tfstate.backup
+
+# Kubernetes secrets (if used in future)
+secrets.yaml
+*-secret.yaml
