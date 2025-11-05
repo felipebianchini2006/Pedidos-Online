@@ -52,6 +52,9 @@ func ProxyHandler(config ProxyConfig) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		startTime := time.Now()
 
+		// Adicionar nome do serviço no contexto para uso nos middlewares (metrics, logging)
+		c.Locals("service_name", config.ServiceName)
+
 		// Construir URL completo do serviço de destino
 		// Remove o prefixo /api/users ou /api/orders e mantém o resto do path
 		fullPath := c.Path()
