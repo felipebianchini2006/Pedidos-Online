@@ -67,11 +67,17 @@ func NewCORSMiddleware(config CORSConfig) fiber.Handler {
 
 // NewDefaultCORSMiddleware cria um middleware CORS com configuração padrão segura
 func NewDefaultCORSMiddleware(allowedOrigins []string) fiber.Handler {
+	// Se usar wildcard (*), não pode ter AllowCredentials=true
+	allowCredentials := true
+	if len(allowedOrigins) == 1 && allowedOrigins[0] == "*" {
+		allowCredentials = false
+	}
+
 	return NewCORSMiddleware(CORSConfig{
 		AllowedOrigins:   allowedOrigins,
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"},
 		AllowedHeaders:   []string{"Origin", "Content-Type", "Accept", "Authorization"},
-		AllowCredentials: true,
+		AllowCredentials: allowCredentials,
 		MaxAge:           3600,
 	})
 }

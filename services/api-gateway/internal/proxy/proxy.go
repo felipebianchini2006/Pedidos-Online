@@ -59,21 +59,25 @@ func ProxyHandler(config ProxyConfig) fiber.Handler {
 		// Remove o prefixo /api/users ou /api/orders e mantém o resto do path
 		fullPath := c.Path()
 
-		// Extrair o path após o prefixo do serviço
-		// Ex: /api/users/profile -> /profile
-		//     /api/orders/123 -> /123
+		// Extrair o path após o prefixo do serviço e adicionar /api/v1
+		// Ex: /api/users/register -> /api/v1/register
+		//     /api/orders/123 -> /api/v1/orders/123
 		var servicePath string
 		if strings.HasPrefix(fullPath, "/api/users") {
-			servicePath = strings.TrimPrefix(fullPath, "/api/users")
+			// Remove /api/users e adiciona /api/v1
+			pathAfterPrefix := strings.TrimPrefix(fullPath, "/api/users")
+			servicePath = "/api/v1" + pathAfterPrefix
 		} else if strings.HasPrefix(fullPath, "/api/orders") {
-			servicePath = strings.TrimPrefix(fullPath, "/api/orders")
+			// Remove /api/orders e adiciona /api/v1/orders
+			pathAfterPrefix := strings.TrimPrefix(fullPath, "/api/orders")
+			servicePath = "/api/v1/orders" + pathAfterPrefix
 		} else {
 			servicePath = fullPath
 		}
 
-		// Se não há path após o prefixo, usar /
-		if servicePath == "" {
-			servicePath = "/"
+		// Se terminou sem path, usar /
+		if servicePath == "/api/v1" || servicePath == "/api/v1/orders" {
+			servicePath += "/"
 		}
 
 		targetURLComplete := targetURL + servicePath
@@ -264,7 +268,7 @@ func shouldSkipRequestHeader(header string, skipList []string) bool {
 func shouldSkipResponseHeader(header string) bool {
 	header = strings.ToLower(header)
 
-	// Headers que sempre devem ser pulados (gerenciados pelo Fiber)
+	// Headers que sempre devem ser pulados (gerenciados pelo Fiber ou Gateway)
 	skip := []string{
 		"connection",
 		"keep-alive",
@@ -275,7 +279,13 @@ func shouldSkipResponseHeader(header string) bool {
 		"trailer",
 		"transfer-encoding",
 		"upgrade",
-		"content-length", // Fiber gerencia automaticamente
+		"content-length",                   // Fiber gerencia automaticamente
+		"access-control-allow-origin",      // CORS gerenciado pelo middleware do Gateway
+		"access-control-allow-credentials", // CORS gerenciado pelo middleware do Gateway
+		"access-control-allow-methods",     // CORS gerenciado pelo middleware do Gateway
+		"access-control-allow-headers",     // CORS gerenciado pelo middleware do Gateway
+		"access-control-max-age",           // CORS gerenciado pelo middleware do Gateway
+		"access-control-expose-headers",    // CORS gerenciado pelo middleware do Gateway
 	}
 
 	for _, s := range skip {
