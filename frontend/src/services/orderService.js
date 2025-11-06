@@ -6,18 +6,12 @@ import api from './api';
 const orderService = {
   /**
    * Criar novo pedido
-   * @param {Array} items - Array de itens do pedido
-   * @param {Object} address - Endereço de entrega
-   * @param {number} totalAmount - Valor total do pedido
+   * @param {Object} orderData - Dados do pedido (items, address, total_amount)
    * @returns {Promise<{success: boolean, data?: object, error?: string}>}
    */
-  async createOrder(items, address, totalAmount) {
+  async createOrder(orderData) {
     try {
-      const response = await api.post('/api/orders', {
-        items,
-        address,
-        total_amount: totalAmount,
-      });
+      const response = await api.post('/api/orders', orderData);
 
       return {
         success: true,
@@ -33,18 +27,12 @@ const orderService = {
 
   /**
    * Buscar lista de pedidos do usuário
-   * @param {number} page - Número da página (padrão: 1)
-   * @param {number} pageSize - Itens por página (padrão: 10)
+   * @param {Object} params - Parâmetros de busca (page, limit, status)
    * @returns {Promise<{success: boolean, data?: object, error?: string}>}
    */
-  async getOrders(page = 1, pageSize = 10) {
+  async getOrders(params = {}) {
     try {
-      const response = await api.get('/api/orders', {
-        params: {
-          page,
-          page_size: pageSize,
-        },
-      });
+      const response = await api.get('/api/orders', { params });
 
       return {
         success: true,
@@ -63,7 +51,7 @@ const orderService = {
    * @param {string} id - ID do pedido
    * @returns {Promise<{success: boolean, data?: object, error?: string}>}
    */
-  async getOrder(id) {
+  async getOrderById(id) {
     try {
       const response = await api.get(`/api/orders/${id}`);
 
@@ -77,6 +65,15 @@ const orderService = {
         error: error.response?.data?.error || 'Erro ao buscar pedido',
       };
     }
+  },
+
+  /**
+   * Buscar detalhes de um pedido específico (alias)
+   * @param {string} id - ID do pedido
+   * @returns {Promise<{success: boolean, data?: object, error?: string}>}
+   */
+  async getOrder(id) {
+    return this.getOrderById(id);
   },
 
   /**

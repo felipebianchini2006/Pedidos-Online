@@ -5,6 +5,7 @@ import Login from './components/Auth/Login';
 import Register from './components/Auth/Register';
 import { useAuth } from './hooks/useAuth';
 import { Layout, ProtectedRoute, ErrorBoundary, Card } from './components/Layout';
+import { OrderList, OrderForm, OrderDetails } from './components/Orders';
 
 // Componente temporário para Home (será substituído depois)
 function Home() {
@@ -99,6 +100,54 @@ function App() {
             element={
               <ProtectedRoute>
                 <Layout>
+                  <OrderList />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          
+          {/* Rota de lista de pedidos (alternativa) */}
+          <Route
+            path="/orders"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <OrderList />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          
+          {/* Rota de novo pedido */}
+          <Route
+            path="/orders/new"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <OrderForm />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          
+          {/* Rota de detalhes do pedido */}
+          <Route
+            path="/orders/:id"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <OrderDetails />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          
+          {/* Rota de dashboard alternativa */}
+          <Route
+            path="/dashboard"
+            element={
+              <ProtectedRoute>
+                <Layout>
                   <Home />
                 </Layout>
               </ProtectedRoute>
@@ -127,37 +176,6 @@ function App() {
                       <Card variant="primary" padding="normal">
                         <p className="text-sm text-gray-700">
                           💡 <strong>Funcionalidades planejadas:</strong> Edição de dados pessoais, alteração de senha, gerenciamento de endereços e muito mais.
-                        </p>
-                      </Card>
-                    </Card>
-                  </div>
-                </Layout>
-              </ProtectedRoute>
-            }
-          />
-          
-          {/* Rota placeholder para novo pedido */}
-          <Route
-            path="/orders/new"
-            element={
-              <ProtectedRoute>
-                <Layout>
-                  <div className="max-w-2xl mx-auto">
-                    <Card variant="elevated" padding="large" className="text-center">
-                      <div className="mb-6">
-                        <div className="w-24 h-24 mx-auto bg-gradient-to-r from-green-500 to-emerald-500 rounded-full flex items-center justify-center text-white text-3xl font-bold mb-4">
-                          ➕
-                        </div>
-                        <h1 className="text-3xl font-bold text-gray-800 mb-2">
-                          Novo Pedido
-                        </h1>
-                        <p className="text-gray-600">
-                          Em construção... Esta página será implementada em breve.
-                        </p>
-                      </div>
-                      <Card variant="primary" padding="normal">
-                        <p className="text-sm text-gray-700">
-                          💡 <strong>Funcionalidades planejadas:</strong> Seleção de produtos, carrinho de compras, endereço de entrega e finalização do pedido.
                         </p>
                       </Card>
                     </Card>
