@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 
 const Header = () => {
@@ -7,6 +7,7 @@ const Header = () => {
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
   if (!user) return null;
 
@@ -27,6 +28,14 @@ const Header = () => {
   const closeMenus = () => {
     setIsMenuOpen(false);
     setIsUserMenuOpen(false);
+  };
+
+  // Verifica se a rota está ativa
+  const isActiveRoute = (path) => {
+    if (path === '/') {
+      return location.pathname === '/';
+    }
+    return location.pathname.startsWith(path);
   };
 
   return (
@@ -63,13 +72,21 @@ const Header = () => {
           <div className="hidden md:flex items-center space-x-6">
             <Link 
               to="/" 
-              className="text-gray-700 hover:text-blue-600 font-medium transition-colors"
+              className={`font-medium transition-colors ${
+                isActiveRoute('/') && !location.pathname.includes('/orders')
+                  ? 'text-blue-600 border-b-2 border-blue-600 pb-1' 
+                  : 'text-gray-700 hover:text-blue-600'
+              }`}
             >
               Meus Pedidos
             </Link>
             <Link 
               to="/orders/new" 
-              className="text-gray-700 hover:text-blue-600 font-medium transition-colors"
+              className={`font-medium transition-colors ${
+                isActiveRoute('/orders/new')
+                  ? 'text-blue-600 border-b-2 border-blue-600 pb-1' 
+                  : 'text-gray-700 hover:text-blue-600'
+              }`}
             >
               Novo Pedido
             </Link>
@@ -187,7 +204,11 @@ const Header = () => {
                 <div className="space-y-4">
                   <Link
                     to="/"
-                    className="flex items-center space-x-3 text-gray-700 hover:text-blue-600 transition-colors"
+                    className={`flex items-center space-x-3 transition-colors ${
+                      isActiveRoute('/') && !location.pathname.includes('/orders')
+                        ? 'text-blue-600 bg-blue-50 -mx-4 px-4 py-2 rounded-lg' 
+                        : 'text-gray-700 hover:text-blue-600 hover:bg-gray-50 -mx-4 px-4 py-2 rounded-lg'
+                    }`}
                     onClick={closeMenus}
                   >
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -197,7 +218,11 @@ const Header = () => {
                   </Link>
                   <Link
                     to="/orders/new"
-                    className="flex items-center space-x-3 text-gray-700 hover:text-blue-600 transition-colors"
+                    className={`flex items-center space-x-3 transition-colors ${
+                      isActiveRoute('/orders/new')
+                        ? 'text-blue-600 bg-blue-50 -mx-4 px-4 py-2 rounded-lg' 
+                        : 'text-gray-700 hover:text-blue-600 hover:bg-gray-50 -mx-4 px-4 py-2 rounded-lg'
+                    }`}
                     onClick={closeMenus}
                   >
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -207,7 +232,11 @@ const Header = () => {
                   </Link>
                   <Link
                     to="/profile"
-                    className="flex items-center space-x-3 text-gray-700 hover:text-blue-600 transition-colors"
+                    className={`flex items-center space-x-3 transition-colors ${
+                      isActiveRoute('/profile')
+                        ? 'text-blue-600 bg-blue-50 -mx-4 px-4 py-2 rounded-lg' 
+                        : 'text-gray-700 hover:text-blue-600 hover:bg-gray-50 -mx-4 px-4 py-2 rounded-lg'
+                    }`}
                     onClick={closeMenus}
                   >
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

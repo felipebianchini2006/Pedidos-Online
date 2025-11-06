@@ -1,63 +1,17 @@
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { AuthProvider } from './context/AuthContext';
 import Login from './components/Auth/Login';
 import Register from './components/Auth/Register';
-import { useAuth } from './hooks/useAuth';
-import { Layout, ProtectedRoute, ErrorBoundary, Card } from './components/Layout';
+import { Layout, ProtectedRoute, ErrorBoundary } from './components/Layout';
 import { OrderList, OrderForm, OrderDetails } from './components/Orders';
+import Profile from './components/Profile/Profile';
+import NotFound from './components/NotFound/NotFound';
 
-// Componente temporário para Home (será substituído depois)
-function Home() {
-  const { user } = useAuth();
-
-  return (
-    <div className="max-w-4xl mx-auto">
-      <Card 
-        variant="elevated"
-        padding="large"
-        className="text-center"
-      >
-        <h1 className="text-4xl font-bold text-blue-600 mb-4">
-          🛒 Bem-vindo ao Pedidos Online
-        </h1>
-        <p className="text-gray-600 text-lg mb-6">
-          Olá, {user?.name || 'Usuário'}!
-        </p>
-        
-        <div className="space-y-4">
-          <Card variant="success" padding="normal">
-            <p className="text-green-800 font-medium">
-              ✅ Você está autenticado e pronto para fazer pedidos!
-            </p>
-          </Card>
-          
-          <Card variant="outlined" padding="normal">
-            <h2 className="font-semibold text-gray-800 mb-3 text-left">
-              Seus dados:
-            </h2>
-            <div className="space-y-2 text-gray-600 text-left">
-              <p><strong>Nome:</strong> {user?.name}</p>
-              <p><strong>Email:</strong> {user?.email}</p>
-              {user?.phone && <p><strong>Telefone:</strong> {user?.phone}</p>}
-            </div>
-          </Card>
-          
-          <Card variant="primary" padding="normal">
-            <p className="font-medium text-blue-800 mb-2">📋 Próximos passos:</p>
-            <ul className="text-left space-y-1 text-gray-700">
-              <li>• Use o menu para navegar entre as páginas</li>
-              <li>• Crie um novo pedido clicando em "Novo Pedido"</li>
-              <li>• Visualize seus pedidos em "Meus Pedidos"</li>
-              <li>• Atualize seu perfil em "Perfil"</li>
-            </ul>
-          </Card>
-        </div>
-      </Card>
-    </div>
-  );
-}
-
+/**
+ * App Component
+ * Componente raiz da aplicação com configuração de rotas
+ */
 function App() {
   return (
     <ErrorBoundary>
@@ -88,13 +42,17 @@ function App() {
           }}
         />
 
-        {/* Rotas */}
+        {/* Rotas da Aplicação */}
         <Routes>
-          {/* Rotas públicas (sem layout) */}
+          {/* ==================== ROTAS PÚBLICAS ==================== */}
+          {/* Sem layout - apenas o componente */}
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
           
-          {/* Rotas protegidas (com layout) */}
+          {/* ==================== ROTAS PROTEGIDAS ==================== */}
+          {/* Com layout (Header + Footer) e proteção de autenticação */}
+          
+          {/* Home - Lista de Pedidos */}
           <Route
             path="/"
             element={
@@ -106,7 +64,7 @@ function App() {
             }
           />
           
-          {/* Rota de lista de pedidos (alternativa) */}
+          {/* Lista de Pedidos (rota alternativa) */}
           <Route
             path="/orders"
             element={
@@ -118,7 +76,7 @@ function App() {
             }
           />
           
-          {/* Rota de novo pedido */}
+          {/* Novo Pedido */}
           <Route
             path="/orders/new"
             element={
@@ -130,7 +88,7 @@ function App() {
             }
           />
           
-          {/* Rota de detalhes do pedido */}
+          {/* Detalhes do Pedido */}
           <Route
             path="/orders/:id"
             element={
@@ -142,51 +100,40 @@ function App() {
             }
           />
           
-          {/* Rota de dashboard alternativa */}
-          <Route
-            path="/dashboard"
-            element={
-              <ProtectedRoute>
-                <Layout>
-                  <Home />
-                </Layout>
-              </ProtectedRoute>
-            }
-          />
-          
-          {/* Rota placeholder para profile */}
+          {/* Perfil do Usuário */}
           <Route
             path="/profile"
             element={
               <ProtectedRoute>
                 <Layout>
-                  <div className="max-w-2xl mx-auto">
-                    <Card variant="elevated" padding="large" className="text-center">
-                      <div className="mb-6">
-                        <div className="w-24 h-24 mx-auto bg-gradient-to-r from-blue-500 to-indigo-500 rounded-full flex items-center justify-center text-white text-3xl font-bold mb-4">
-                          👤
-                        </div>
-                        <h1 className="text-3xl font-bold text-gray-800 mb-2">
-                          Página de Perfil
-                        </h1>
-                        <p className="text-gray-600">
-                          Em construção... Esta página será implementada em breve.
-                        </p>
-                      </div>
-                      <Card variant="primary" padding="normal">
-                        <p className="text-sm text-gray-700">
-                          💡 <strong>Funcionalidades planejadas:</strong> Edição de dados pessoais, alteração de senha, gerenciamento de endereços e muito mais.
-                        </p>
-                      </Card>
-                    </Card>
+                  <Profile />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          
+          {/* Alterar Senha (placeholder) */}
+          <Route
+            path="/change-password"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <div className="max-w-2xl mx-auto text-center py-12">
+                    <h1 className="text-3xl font-bold text-gray-800 mb-4">
+                      Alterar Senha
+                    </h1>
+                    <p className="text-gray-600">
+                      Esta funcionalidade será implementada em breve.
+                    </p>
                   </div>
                 </Layout>
               </ProtectedRoute>
             }
           />
           
-          {/* Redirect para home */}
-          <Route path="*" element={<Navigate to="/" replace />} />
+          {/* ==================== PÁGINA 404 ==================== */}
+          {/* Rota catch-all para páginas não encontradas */}
+          <Route path="*" element={<NotFound />} />
         </Routes>
       </AuthProvider>
     </ErrorBoundary>
