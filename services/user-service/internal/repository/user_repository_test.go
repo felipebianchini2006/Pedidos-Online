@@ -3,279 +3,601 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"regexp"
 	"testing"
 	"time"
 
+	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"pedidos-online/user-service/internal/model"
 )
 
-// MockDB is a helper for testing
-// In production, use a real test database or library like sqlmock
+// setupTestDB creates a mock database connection and sqlmock
+func setupTestDB(t *testing.T) (*sql.DB, sqlmock.Sqlmock, UserRepository) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
 
-func TestUserRepository_Interface(t *testing.T) {
-	// Verify that userRepository implements UserRepository interface
-	var _ UserRepository = (*userRepository)(nil)
-}
-
-func TestNewUserRepository(t *testing.T) {
-	db := &sql.DB{} // Mock DB
 	repo := NewUserRepository(db)
 
-	if repo == nil {
-		t.Error("NewUserRepository returned nil")
-	}
+	return db, mock, repo
 }
 
-func TestUserRepository_Errors(t *testing.T) {
-	tests := []struct {
-		name     string
-		err      error
-		expected string
-	}{
-		{
-			name:     "user not found error",
-			err:      ErrUserNotFound,
-			expected: "user not found",
-		},
-		{
-			name:     "user already exists error",
-			err:      ErrUserAlreadyExists,
-			expected: "user with this email already exists",
-		},
-		{
-			name:     "invalid user ID error",
-			err:      ErrInvalidUserID,
-			expected: "invalid user ID",
-		},
-	}
+func TestCreate(t *testing.T) {
+	t.Run("successfully create user", func(t *testing.T) {
+		db, mock, repo := setupTestDB(t)
+		defer db.Close()
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if tt.err.Error() != tt.expected {
-				t.Errorf("expected error message %q, got %q", tt.expected, tt.err.Error())
-			}
-		})
-	}
-}
-
-func TestUserRepository_ValidationLogic(t *testing.T) {
-	// Test ID validation logic
-	t.Run("empty ID should be invalid", func(t *testing.T) {
-		id := ""
-		if id != "" {
-			t.Error("empty string should be considered invalid")
+		ctx := context.Background()
+		user := &model.User{
+			ID:        uuid.New(),
+			Email:     "test@example.com",
+			Password:  "hashedpassword123",
+			Name:      "Test User",
+			Phone:     "1234567890",
+			CreatedAt: time.Now(),
+			UpdatedAt: time.Now(),
 		}
+
+		// Expect email uniqueness check
+		mock.ExpectQuery(regexp.QuoteMeta(`SELECT EXISTS(SELECT 1 FROM users WHERE email = $1)`)).
+			WithArgs(user.Email).
+			WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(false))
+
+		// Expect insert query
+		mock.ExpectExec(regexp.QuoteMeta(`INSERT INTO users (id, email, password, name, phone, created_at, updated_at)`)).
+			WithArgs(user.ID, user.Email, user.Password, user.Name, user.Phone, user.CreatedAt, user.UpdatedAt).
+			WillReturnResult(sqlmock.NewResult(1, 1))
+
+		err := repo.Create(ctx, user)
+
+		require.NoError(t, err)
+		assert.NoError(t, mock.ExpectationsWereMet())
 	})
 
-	// Test email validation logic
-	t.Run("empty email should be invalid", func(t *testing.T) {
-		email := ""
-		if email != "" {
-			t.Error("empty email should be considered invalid")
+	t.Run("error when email already exists", func(t *testing.T) {
+		db, mock, repo := setupTestDB(t)
+		defer db.Close()
+
+		ctx := context.Background()
+		user := &model.User{
+			ID:        uuid.New(),
+			Email:     "existing@example.com",
+			Password:  "hashedpassword123",
+			Name:      "Test User",
+			Phone:     "1234567890",
+			CreatedAt: time.Now(),
+			UpdatedAt: time.Now(),
 		}
-	})
-}
 
-func TestUserRepository_ListLimits(t *testing.T) {
-	tests := []struct {
-		name          string
-		inputLimit    int
-		inputOffset   int
-		expectedLimit int
-		expectedOffset int
-	}{
-		{
-			name:           "default limit when zero",
-			inputLimit:     0,
-			inputOffset:    0,
-			expectedLimit:  10,
-			expectedOffset: 0,
-		},
-		{
-			name:           "max limit when exceeding",
-			inputLimit:     200,
-			inputOffset:    0,
-			expectedLimit:  100,
-			expectedOffset: 0,
-		},
-		{
-			name:           "negative offset becomes zero",
-			inputLimit:     10,
-			inputOffset:    -5,
-			expectedLimit:  10,
-			expectedOffset: 0,
-		},
-		{
-			name:           "normal values unchanged",
-			inputLimit:     50,
-			inputOffset:    20,
-			expectedLimit:  50,
-			expectedOffset: 20,
-		},
-	}
+		// Expect email uniqueness check to return true (email exists)
+		mock.ExpectQuery(regexp.QuoteMeta(`SELECT EXISTS(SELECT 1 FROM users WHERE email = $1)`)).
+			WithArgs(user.Email).
+			WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			limit := tt.inputLimit
-			offset := tt.inputOffset
+		err := repo.Create(ctx, user)
 
-			// Apply same logic as in List method
-			if limit <= 0 {
-				limit = 10
-			}
-			if limit > 100 {
-				limit = 100
-			}
-			if offset < 0 {
-				offset = 0
-			}
-
-			if limit != tt.expectedLimit {
-				t.Errorf("expected limit %d, got %d", tt.expectedLimit, limit)
-			}
-			if offset != tt.expectedOffset {
-				t.Errorf("expected offset %d, got %d", tt.expectedOffset, offset)
-			}
-		})
-	}
-}
-
-func TestUserModel_BeforeCreate(t *testing.T) {
-	user := &model.User{
-		Email:    "test@example.com",
-		Password: "hashedpassword",
-		Name:     "Test User",
-		Phone:    "11999999999",
-	}
-
-	user.BeforeCreate()
-
-	if user.ID == uuid.Nil {
-		t.Error("expected ID to be generated")
-	}
-
-	if user.CreatedAt.IsZero() {
-		t.Error("expected CreatedAt to be set")
-	}
-
-	if user.UpdatedAt.IsZero() {
-		t.Error("expected UpdatedAt to be set")
-	}
-}
-
-func TestUserModel_HashPassword(t *testing.T) {
-	user := &model.User{
-		Password: "plainpassword",
-	}
-
-	err := user.HashPassword()
-	if err != nil {
-		t.Errorf("unexpected error: %v", err)
-	}
-
-	if user.Password == "plainpassword" {
-		t.Error("password should be hashed")
-	}
-
-	if len(user.Password) < 20 {
-		t.Error("hashed password should be longer")
-	}
-}
-
-func TestUserModel_ComparePassword(t *testing.T) {
-	user := &model.User{
-		Password: "plainpassword",
-	}
-
-	err := user.HashPassword()
-	if err != nil {
-		t.Fatalf("failed to hash password: %v", err)
-	}
-
-	t.Run("correct password", func(t *testing.T) {
-		err := user.ComparePassword("plainpassword")
-		if err != nil {
-			t.Errorf("expected password to match, got error: %v", err)
-		}
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrUserAlreadyExists)
+		assert.NoError(t, mock.ExpectationsWereMet())
 	})
 
-	t.Run("incorrect password", func(t *testing.T) {
-		err := user.ComparePassword("wrongpassword")
-		if err == nil {
-			t.Error("expected error for incorrect password")
+	t.Run("error when database insert fails", func(t *testing.T) {
+		db, mock, repo := setupTestDB(t)
+		defer db.Close()
+
+		ctx := context.Background()
+		user := &model.User{
+			ID:        uuid.New(),
+			Email:     "test@example.com",
+			Password:  "hashedpassword123",
+			Name:      "Test User",
+			Phone:     "1234567890",
+			CreatedAt: time.Now(),
+			UpdatedAt: time.Now(),
 		}
+
+		// Expect email uniqueness check
+		mock.ExpectQuery(regexp.QuoteMeta(`SELECT EXISTS(SELECT 1 FROM users WHERE email = $1)`)).
+			WithArgs(user.Email).
+			WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(false))
+
+		// Expect insert query to fail
+		mock.ExpectExec(regexp.QuoteMeta(`INSERT INTO users`)).
+			WithArgs(user.ID, user.Email, user.Password, user.Name, user.Phone, user.CreatedAt, user.UpdatedAt).
+			WillReturnError(sql.ErrConnDone)
+
+		err := repo.Create(ctx, user)
+
+		require.Error(t, err)
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	t.Run("error when checking email uniqueness fails", func(t *testing.T) {
+		db, mock, repo := setupTestDB(t)
+		defer db.Close()
+
+		ctx := context.Background()
+		user := &model.User{
+			ID:    uuid.New(),
+			Email: "test@example.com",
+		}
+
+		// Expect email uniqueness check to fail
+		mock.ExpectQuery(regexp.QuoteMeta(`SELECT EXISTS(SELECT 1 FROM users WHERE email = $1)`)).
+			WithArgs(user.Email).
+			WillReturnError(sql.ErrConnDone)
+
+		err := repo.Create(ctx, user)
+
+		require.Error(t, err)
+		assert.NoError(t, mock.ExpectationsWereMet())
 	})
 }
 
-func TestUserModel_ToResponse(t *testing.T) {
-	now := time.Now()
-	id := uuid.New()
+func TestFindByEmail(t *testing.T) {
+	t.Run("successfully find user by email", func(t *testing.T) {
+		db, mock, repo := setupTestDB(t)
+		defer db.Close()
 
-	user := &model.User{
-		ID:        id,
-		Email:     "test@example.com",
-		Password:  "hashedpassword",
-		Name:      "Test User",
-		Phone:     "11999999999",
-		CreatedAt: now,
-		UpdatedAt: now,
-	}
+		ctx := context.Background()
+		expectedUser := &model.User{
+			ID:        uuid.New(),
+			Email:     "test@example.com",
+			Password:  "hashedpassword123",
+			Name:      "Test User",
+			Phone:     "1234567890",
+			CreatedAt: time.Now(),
+			UpdatedAt: time.Now(),
+		}
 
-	response := user.ToResponse()
+		rows := sqlmock.NewRows([]string{"id", "email", "password", "name", "phone", "created_at", "updated_at"}).
+			AddRow(expectedUser.ID, expectedUser.Email, expectedUser.Password, expectedUser.Name, expectedUser.Phone, expectedUser.CreatedAt, expectedUser.UpdatedAt)
 
-	if response.ID != id {
-		t.Error("ID mismatch")
-	}
-	if response.Email != user.Email {
-		t.Error("Email mismatch")
-	}
-	if response.Name != user.Name {
-		t.Error("Name mismatch")
-	}
-	if response.Phone != user.Phone {
-		t.Error("Phone mismatch")
-	}
-	if response.CreatedAt != now {
-		t.Error("CreatedAt mismatch")
-	}
-	if response.UpdatedAt != now {
-		t.Error("UpdatedAt mismatch")
-	}
+		mock.ExpectQuery(regexp.QuoteMeta(`SELECT id, email, password, name, phone, created_at, updated_at FROM users WHERE email = $1`)).
+			WithArgs(expectedUser.Email).
+			WillReturnRows(rows)
 
-	// Verify password is not exposed in response struct
-	// This is verified by the struct definition, but we can't directly test it here
+		user, err := repo.FindByEmail(ctx, expectedUser.Email)
+
+		require.NoError(t, err)
+		require.NotNil(t, user)
+		assert.Equal(t, expectedUser.ID, user.ID)
+		assert.Equal(t, expectedUser.Email, user.Email)
+		assert.Equal(t, expectedUser.Password, user.Password)
+		assert.Equal(t, expectedUser.Name, user.Name)
+		assert.Equal(t, expectedUser.Phone, user.Phone)
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	t.Run("return error when user not found", func(t *testing.T) {
+		db, mock, repo := setupTestDB(t)
+		defer db.Close()
+
+		ctx := context.Background()
+		email := "nonexistent@example.com"
+
+		mock.ExpectQuery(regexp.QuoteMeta(`SELECT id, email, password, name, phone, created_at, updated_at FROM users WHERE email = $1`)).
+			WithArgs(email).
+			WillReturnError(sql.ErrNoRows)
+
+		user, err := repo.FindByEmail(ctx, email)
+
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrUserNotFound)
+		assert.Nil(t, user)
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	t.Run("error when email is empty", func(t *testing.T) {
+		db, mock, repo := setupTestDB(t)
+		defer db.Close()
+
+		ctx := context.Background()
+
+		user, err := repo.FindByEmail(ctx, "")
+
+		require.Error(t, err)
+		assert.Nil(t, user)
+		assert.Contains(t, err.Error(), "email cannot be empty")
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	t.Run("error when database query fails", func(t *testing.T) {
+		db, mock, repo := setupTestDB(t)
+		defer db.Close()
+
+		ctx := context.Background()
+		email := "test@example.com"
+
+		mock.ExpectQuery(regexp.QuoteMeta(`SELECT id, email, password, name, phone, created_at, updated_at FROM users WHERE email = $1`)).
+			WithArgs(email).
+			WillReturnError(sql.ErrConnDone)
+
+		user, err := repo.FindByEmail(ctx, email)
+
+		require.Error(t, err)
+		assert.Nil(t, user)
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
 }
 
-func TestContext_Timeout(t *testing.T) {
-	// Test that context timeout works as expected
-	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
-	defer cancel()
+func TestFindByID(t *testing.T) {
+	t.Run("successfully find user by ID", func(t *testing.T) {
+		db, mock, repo := setupTestDB(t)
+		defer db.Close()
 
-	select {
-	case <-ctx.Done():
-		t.Error("context should not be done immediately")
-	default:
-		// Expected
-	}
+		ctx := context.Background()
+		expectedUser := &model.User{
+			ID:        uuid.New(),
+			Email:     "test@example.com",
+			Name:      "Test User",
+			Phone:     "1234567890",
+			CreatedAt: time.Now(),
+			UpdatedAt: time.Now(),
+		}
 
-	time.Sleep(150 * time.Millisecond)
+		rows := sqlmock.NewRows([]string{"id", "email", "name", "phone", "created_at", "updated_at"}).
+			AddRow(expectedUser.ID, expectedUser.Email, expectedUser.Name, expectedUser.Phone, expectedUser.CreatedAt, expectedUser.UpdatedAt)
 
-	select {
-	case <-ctx.Done():
-		// Expected - context timed out
-	default:
-		t.Error("context should be done after timeout")
-	}
+		mock.ExpectQuery(regexp.QuoteMeta(`SELECT id, email, name, phone, created_at, updated_at FROM users WHERE id = $1`)).
+			WithArgs(expectedUser.ID.String()).
+			WillReturnRows(rows)
+
+		user, err := repo.FindByID(ctx, expectedUser.ID.String())
+
+		require.NoError(t, err)
+		require.NotNil(t, user)
+		assert.Equal(t, expectedUser.ID, user.ID)
+		assert.Equal(t, expectedUser.Email, user.Email)
+		assert.Equal(t, expectedUser.Name, user.Name)
+		assert.Equal(t, expectedUser.Phone, user.Phone)
+		assert.Empty(t, user.Password) // Password should not be returned
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	t.Run("return error when user not found", func(t *testing.T) {
+		db, mock, repo := setupTestDB(t)
+		defer db.Close()
+
+		ctx := context.Background()
+		userID := uuid.New().String()
+
+		mock.ExpectQuery(regexp.QuoteMeta(`SELECT id, email, name, phone, created_at, updated_at FROM users WHERE id = $1`)).
+			WithArgs(userID).
+			WillReturnError(sql.ErrNoRows)
+
+		user, err := repo.FindByID(ctx, userID)
+
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrUserNotFound)
+		assert.Nil(t, user)
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	t.Run("error for invalid user ID", func(t *testing.T) {
+		db, mock, repo := setupTestDB(t)
+		defer db.Close()
+
+		ctx := context.Background()
+
+		user, err := repo.FindByID(ctx, "")
+
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrInvalidUserID)
+		assert.Nil(t, user)
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	t.Run("error when database query fails", func(t *testing.T) {
+		db, mock, repo := setupTestDB(t)
+		defer db.Close()
+
+		ctx := context.Background()
+		userID := uuid.New().String()
+
+		mock.ExpectQuery(regexp.QuoteMeta(`SELECT id, email, name, phone, created_at, updated_at FROM users WHERE id = $1`)).
+			WithArgs(userID).
+			WillReturnError(sql.ErrConnDone)
+
+		user, err := repo.FindByID(ctx, userID)
+
+		require.Error(t, err)
+		assert.Nil(t, user)
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
 }
 
-// Note: For full integration tests with a real database, you would need:
-// 1. A test database instance
-// 2. Setup and teardown functions
-// 3. Test data fixtures
-// 4. Transaction rollbacks between tests
-//
-// Consider using libraries like:
-// - github.com/DATA-DOG/go-sqlmock for mocking database
-// - testcontainers-go for spinning up real PostgreSQL in Docker
-// - github.com/stretchr/testify for assertions
+func TestUpdate(t *testing.T) {
+	t.Run("successfully update user", func(t *testing.T) {
+		db, mock, repo := setupTestDB(t)
+		defer db.Close()
+
+		ctx := context.Background()
+		user := &model.User{
+			ID:        uuid.New(),
+			Name:      "Updated Name",
+			Phone:     "9876543210",
+			UpdatedAt: time.Now(),
+		}
+
+		mock.ExpectExec(regexp.QuoteMeta(`UPDATE users SET name = $1, phone = $2, updated_at = $3 WHERE id = $4`)).
+			WithArgs(user.Name, user.Phone, user.UpdatedAt, user.ID).
+			WillReturnResult(sqlmock.NewResult(0, 1))
+
+		err := repo.Update(ctx, user)
+
+		require.NoError(t, err)
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	t.Run("error when user not found", func(t *testing.T) {
+		db, mock, repo := setupTestDB(t)
+		defer db.Close()
+
+		ctx := context.Background()
+		user := &model.User{
+			ID:        uuid.New(),
+			Name:      "Updated Name",
+			Phone:     "9876543210",
+			UpdatedAt: time.Now(),
+		}
+
+		// No rows affected
+		mock.ExpectExec(regexp.QuoteMeta(`UPDATE users SET name = $1, phone = $2, updated_at = $3 WHERE id = $4`)).
+			WithArgs(user.Name, user.Phone, user.UpdatedAt, user.ID).
+			WillReturnResult(sqlmock.NewResult(0, 0))
+
+		err := repo.Update(ctx, user)
+
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrUserNotFound)
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	t.Run("error for invalid user ID", func(t *testing.T) {
+		db, mock, repo := setupTestDB(t)
+		defer db.Close()
+
+		ctx := context.Background()
+		user := &model.User{
+			ID:        uuid.Nil,
+			Name:      "Updated Name",
+			Phone:     "1234567890",
+			UpdatedAt: time.Now(),
+		}
+
+		// uuid.Nil.String() returns "00000000-0000-0000-0000-000000000000", not empty string
+		// So the update will be attempted but return 0 rows affected
+		mock.ExpectExec(regexp.QuoteMeta(`UPDATE users SET name = $1, phone = $2, updated_at = $3 WHERE id = $4`)).
+			WithArgs(user.Name, user.Phone, user.UpdatedAt, user.ID).
+			WillReturnResult(sqlmock.NewResult(0, 0))
+
+		err := repo.Update(ctx, user)
+
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrUserNotFound)
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	t.Run("error when database update fails", func(t *testing.T) {
+		db, mock, repo := setupTestDB(t)
+		defer db.Close()
+
+		ctx := context.Background()
+		user := &model.User{
+			ID:        uuid.New(),
+			Name:      "Updated Name",
+			Phone:     "9876543210",
+			UpdatedAt: time.Now(),
+		}
+
+		mock.ExpectExec(regexp.QuoteMeta(`UPDATE users SET name = $1, phone = $2, updated_at = $3 WHERE id = $4`)).
+			WithArgs(user.Name, user.Phone, user.UpdatedAt, user.ID).
+			WillReturnError(sql.ErrConnDone)
+
+		err := repo.Update(ctx, user)
+
+		require.Error(t, err)
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+}
+
+func TestDelete(t *testing.T) {
+	t.Run("successfully delete user", func(t *testing.T) {
+		db, mock, repo := setupTestDB(t)
+		defer db.Close()
+
+		ctx := context.Background()
+		userID := uuid.New().String()
+
+		mock.ExpectExec(regexp.QuoteMeta(`DELETE FROM users WHERE id = $1`)).
+			WithArgs(userID).
+			WillReturnResult(sqlmock.NewResult(0, 1))
+
+		err := repo.Delete(ctx, userID)
+
+		require.NoError(t, err)
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	t.Run("error when user not found", func(t *testing.T) {
+		db, mock, repo := setupTestDB(t)
+		defer db.Close()
+
+		ctx := context.Background()
+		userID := uuid.New().String()
+
+		mock.ExpectExec(regexp.QuoteMeta(`DELETE FROM users WHERE id = $1`)).
+			WithArgs(userID).
+			WillReturnResult(sqlmock.NewResult(0, 0))
+
+		err := repo.Delete(ctx, userID)
+
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrUserNotFound)
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	t.Run("error for empty user ID", func(t *testing.T) {
+		db, mock, repo := setupTestDB(t)
+		defer db.Close()
+
+		ctx := context.Background()
+
+		err := repo.Delete(ctx, "")
+
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrInvalidUserID)
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+}
+
+func TestList(t *testing.T) {
+	t.Run("successfully list users", func(t *testing.T) {
+		db, mock, repo := setupTestDB(t)
+		defer db.Close()
+
+		ctx := context.Background()
+		limit := 10
+		offset := 0
+
+		user1 := &model.User{
+			ID:        uuid.New(),
+			Email:     "user1@example.com",
+			Name:      "User 1",
+			Phone:     "1111111111",
+			CreatedAt: time.Now(),
+			UpdatedAt: time.Now(),
+		}
+		user2 := &model.User{
+			ID:        uuid.New(),
+			Email:     "user2@example.com",
+			Name:      "User 2",
+			Phone:     "2222222222",
+			CreatedAt: time.Now(),
+			UpdatedAt: time.Now(),
+		}
+
+		rows := sqlmock.NewRows([]string{"id", "email", "name", "phone", "created_at", "updated_at"}).
+			AddRow(user1.ID, user1.Email, user1.Name, user1.Phone, user1.CreatedAt, user1.UpdatedAt).
+			AddRow(user2.ID, user2.Email, user2.Name, user2.Phone, user2.CreatedAt, user2.UpdatedAt)
+
+		mock.ExpectQuery(regexp.QuoteMeta(`SELECT id, email, name, phone, created_at, updated_at FROM users ORDER BY created_at DESC LIMIT $1 OFFSET $2`)).
+			WithArgs(limit, offset).
+			WillReturnRows(rows)
+
+		users, err := repo.List(ctx, limit, offset)
+
+		require.NoError(t, err)
+		require.Len(t, users, 2)
+		assert.Equal(t, user1.Email, users[0].Email)
+		assert.Equal(t, user2.Email, users[1].Email)
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	t.Run("use default limit when zero", func(t *testing.T) {
+		db, mock, repo := setupTestDB(t)
+		defer db.Close()
+
+		ctx := context.Background()
+
+		mock.ExpectQuery(regexp.QuoteMeta(`SELECT id, email, name, phone, created_at, updated_at FROM users ORDER BY created_at DESC LIMIT $1 OFFSET $2`)).
+			WithArgs(10, 0). // Default limit is 10
+			WillReturnRows(sqlmock.NewRows([]string{"id", "email", "name", "phone", "created_at", "updated_at"}))
+
+		users, err := repo.List(ctx, 0, 0)
+
+		require.NoError(t, err)
+		require.NotNil(t, users)
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	t.Run("cap limit at maximum", func(t *testing.T) {
+		db, mock, repo := setupTestDB(t)
+		defer db.Close()
+
+		ctx := context.Background()
+
+		mock.ExpectQuery(regexp.QuoteMeta(`SELECT id, email, name, phone, created_at, updated_at FROM users ORDER BY created_at DESC LIMIT $1 OFFSET $2`)).
+			WithArgs(100, 0). // Maximum limit is 100
+			WillReturnRows(sqlmock.NewRows([]string{"id", "email", "name", "phone", "created_at", "updated_at"}))
+
+		users, err := repo.List(ctx, 200, 0)
+
+		require.NoError(t, err)
+		require.NotNil(t, users)
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	t.Run("return empty list when no users", func(t *testing.T) {
+		db, mock, repo := setupTestDB(t)
+		defer db.Close()
+
+		ctx := context.Background()
+
+		mock.ExpectQuery(regexp.QuoteMeta(`SELECT id, email, name, phone, created_at, updated_at FROM users ORDER BY created_at DESC LIMIT $1 OFFSET $2`)).
+			WithArgs(10, 0).
+			WillReturnRows(sqlmock.NewRows([]string{"id", "email", "name", "phone", "created_at", "updated_at"}))
+
+		users, err := repo.List(ctx, 10, 0)
+
+		require.NoError(t, err)
+		require.NotNil(t, users)
+		assert.Len(t, users, 0)
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+}
+
+func TestCount(t *testing.T) {
+	t.Run("successfully count users", func(t *testing.T) {
+		db, mock, repo := setupTestDB(t)
+		defer db.Close()
+
+		ctx := context.Background()
+		expectedCount := int64(42)
+
+		mock.ExpectQuery(regexp.QuoteMeta(`SELECT COUNT(*) FROM users`)).
+			WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(expectedCount))
+
+		count, err := repo.Count(ctx)
+
+		require.NoError(t, err)
+		assert.Equal(t, expectedCount, count)
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	t.Run("return zero when no users", func(t *testing.T) {
+		db, mock, repo := setupTestDB(t)
+		defer db.Close()
+
+		ctx := context.Background()
+
+		mock.ExpectQuery(regexp.QuoteMeta(`SELECT COUNT(*) FROM users`)).
+			WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
+
+		count, err := repo.Count(ctx)
+
+		require.NoError(t, err)
+		assert.Equal(t, int64(0), count)
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	t.Run("error when database query fails", func(t *testing.T) {
+		db, mock, repo := setupTestDB(t)
+		defer db.Close()
+
+		ctx := context.Background()
+
+		mock.ExpectQuery(regexp.QuoteMeta(`SELECT COUNT(*) FROM users`)).
+			WillReturnError(sql.ErrConnDone)
+
+		count, err := repo.Count(ctx)
+
+		require.Error(t, err)
+		assert.Equal(t, int64(0), count)
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+}

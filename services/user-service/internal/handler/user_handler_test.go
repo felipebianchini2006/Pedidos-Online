@@ -3,271 +3,569 @@ package handler
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
+
+	"pedidos-online/user-service/internal/model"
+	"pedidos-online/user-service/internal/service"
 )
 
-// Test Response struct
-func TestResponse_Struct(t *testing.T) {
-	resp := Response{
-		Success: true,
-		Data:    "test data",
-		Error:   "",
-		Message: "test message",
-	}
-
-	if !resp.Success {
-		t.Error("Success should be true")
-	}
-	if resp.Data != "test data" {
-		t.Error("Data mismatch")
-	}
+// MockUserService is a mock implementation of UserService
+type MockUserService struct {
+	mock.Mock
 }
 
-// Test RegisterRequest struct
-func TestRegisterRequest_Struct(t *testing.T) {
-	req := RegisterRequest{
-		Email:    "test@example.com",
-		Password: "password123",
-		Name:     "Test User",
-		Phone:    "11999999999",
+func (m *MockUserService) Register(ctx interface{}, email, password, name, phone string) (*model.User, error) {
+	args := m.Called(ctx, email, password, name, phone)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
 	}
-
-	if req.Email != "test@example.com" {
-		t.Error("Email mismatch")
-	}
+	return args.Get(0).(*model.User), args.Error(1)
 }
 
-// Test LoginRequest struct
-func TestLoginRequest_Struct(t *testing.T) {
-	req := LoginRequest{
-		Email:    "test@example.com",
-		Password: "password123",
-	}
-
-	if req.Email != "test@example.com" {
-		t.Error("Email mismatch")
-	}
+func (m *MockUserService) Login(ctx interface{}, email, password string) (string, error) {
+	args := m.Called(ctx, email, password)
+	return args.String(0), args.Error(1)
 }
 
-// Test UpdateProfileRequest struct
-func TestUpdateProfileRequest_Struct(t *testing.T) {
-	req := UpdateProfileRequest{
-		Name:  "New Name",
-		Phone: "11988888888",
+func (m *MockUserService) GetProfile(ctx interface{}, userID string) (*model.User, error) {
+	args := m.Called(ctx, userID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
 	}
-
-	if req.Name != "New Name" {
-		t.Error("Name mismatch")
-	}
+	return args.Get(0).(*model.User), args.Error(1)
 }
 
-// Test AuthResponse struct
-func TestAuthResponse_Struct(t *testing.T) {
-	resp := AuthResponse{
-		Token: "jwt-token",
-		User:  map[string]string{"id": "123"},
+func (m *MockUserService) UpdateProfile(ctx interface{}, userID, name, phone string) (*model.User, error) {
+	args := m.Called(ctx, userID, name, phone)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
 	}
-
-	if resp.Token != "jwt-token" {
-		t.Error("Token mismatch")
-	}
+	return args.Get(0).(*model.User), args.Error(1)
 }
 
-// Test NewUserHandler
-func TestNewUserHandler(t *testing.T) {
-	handler := NewUserHandler(nil)
-
-	if handler == nil {
-		t.Error("Handler should not be nil")
-	}
-
-	if handler.validator == nil {
-		t.Error("Validator should be initialized")
-	}
+func (m *MockUserService) ValidateToken(tokenString string) (string, error) {
+	args := m.Called(tokenString)
+	return args.String(0), args.Error(1)
 }
 
-// Test formatValidationError
-func TestFormatValidationError(t *testing.T) {
-	// Create a simple error to test
-	err := fiber.NewError(fiber.StatusBadRequest, "test error")
-	
-	result := formatValidationError(err)
-	
-	if result == "" {
-		t.Error("Result should not be empty")
-	}
-}
-
-// Test Register endpoint structure (without actual service call)
-func TestRegister_InvalidJSON(t *testing.T) {
-	app := fiber.New()
-	handler := NewUserHandler(nil)
-	
-	app.Post("/register", handler.Register)
-
-	// Create request with invalid JSON
-	req := httptest.NewRequest("POST", "/register", bytes.NewBuffer([]byte("invalid json")))
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := app.Test(req)
-	if err != nil {
-		t.Fatalf("Failed to test request: %v", err)
-	}
-
-	if resp.StatusCode != fiber.StatusBadRequest {
-		t.Errorf("Expected status %d, got %d", fiber.StatusBadRequest, resp.StatusCode)
-	}
-}
-
-// Test Login endpoint structure (without actual service call)
-func TestLogin_InvalidJSON(t *testing.T) {
-	app := fiber.New()
-	handler := NewUserHandler(nil)
-	
-	app.Post("/login", handler.Login)
-
-	// Create request with invalid JSON
-	req := httptest.NewRequest("POST", "/login", bytes.NewBuffer([]byte("invalid json")))
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := app.Test(req)
-	if err != nil {
-		t.Fatalf("Failed to test request: %v", err)
-	}
-
-	if resp.StatusCode != fiber.StatusBadRequest {
-		t.Errorf("Expected status %d, got %d", fiber.StatusBadRequest, resp.StatusCode)
-	}
-}
-
-// Test GetProfile without authentication
-func TestGetProfile_Unauthorized(t *testing.T) {
-	app := fiber.New()
-	handler := NewUserHandler(nil)
-	
-	app.Get("/profile", handler.GetProfile)
-
-	// Create request without userID in context
-	req := httptest.NewRequest("GET", "/profile", nil)
-
-	resp, err := app.Test(req)
-	if err != nil {
-		t.Fatalf("Failed to test request: %v", err)
-	}
-
-	if resp.StatusCode != fiber.StatusUnauthorized {
-		t.Errorf("Expected status %d, got %d", fiber.StatusUnauthorized, resp.StatusCode)
-	}
-}
-
-// Test UpdateProfile without authentication
-func TestUpdateProfile_Unauthorized(t *testing.T) {
-	app := fiber.New()
-	handler := NewUserHandler(nil)
-	
-	app.Put("/profile", handler.UpdateProfile)
-
-	// Create request without userID in context
-	reqBody, _ := json.Marshal(UpdateProfileRequest{
-		Name:  "New Name",
-		Phone: "11999999999",
+func setupTestApp() *fiber.App {
+	app := fiber.New(fiber.Config{
+		ErrorHandler: func(c *fiber.Ctx, err error) error {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": err.Error(),
+			})
+		},
 	})
-	req := httptest.NewRequest("PUT", "/profile", bytes.NewBuffer(reqBody))
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := app.Test(req)
-	if err != nil {
-		t.Fatalf("Failed to test request: %v", err)
-	}
-
-	if resp.StatusCode != fiber.StatusUnauthorized {
-		t.Errorf("Expected status %d, got %d", fiber.StatusUnauthorized, resp.StatusCode)
-	}
+	return app
 }
 
-// Test UpdateProfile with empty fields
-func TestUpdateProfile_EmptyFields(t *testing.T) {
-	app := fiber.New()
-	handler := NewUserHandler(nil)
-	
-	// Create a middleware to inject userID
-	app.Use(func(c *fiber.Ctx) error {
-		c.Locals("userID", "test-user-id")
-		return c.Next()
+func TestRegisterHandler(t *testing.T) {
+	t.Run("successfully register with valid data", func(t *testing.T) {
+		mockService := new(MockUserService)
+		handler := NewUserHandler(mockService)
+		app := setupTestApp()
+
+		user := &model.User{
+			ID:    uuid.New(),
+			Email: "test@example.com",
+			Name:  "Test User",
+			Phone: "1234567890",
+		}
+
+		mockService.On("Register", mock.Anything, "test@example.com", "password123", "Test User", "1234567890").
+			Return(user, nil)
+
+		requestBody := map[string]string{
+			"email":    "test@example.com",
+			"password": "password123",
+			"name":     "Test User",
+			"phone":    "1234567890",
+		}
+		body, _ := json.Marshal(requestBody)
+
+		req := httptest.NewRequest("POST", "/register", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := app.Test(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		// Perform actual registration
+		app.Post("/register", handler.Register)
+		resp, err = app.Test(req)
+		require.NoError(t, err)
+
+		assert.Equal(t, fiber.StatusCreated, resp.StatusCode)
+
+		var response Response
+		json.NewDecoder(resp.Body).Decode(&response)
+
+		assert.True(t, response.Success)
+		assert.NotNil(t, response.Data)
+		mockService.AssertExpectations(t)
 	})
-	
-	app.Put("/profile", handler.UpdateProfile)
 
-	// Create request with empty fields
-	reqBody, _ := json.Marshal(UpdateProfileRequest{
-		Name:  "",
-		Phone: "",
+	t.Run("error with invalid request body", func(t *testing.T) {
+		mockService := new(MockUserService)
+		handler := NewUserHandler(mockService)
+		app := setupTestApp()
+		app.Post("/register", handler.Register)
+
+		req := httptest.NewRequest("POST", "/register", bytes.NewReader([]byte("invalid json")))
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := app.Test(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
+
+		var response Response
+		json.NewDecoder(resp.Body).Decode(&response)
+
+		assert.False(t, response.Success)
+		assert.NotEmpty(t, response.Error)
+		mockService.AssertExpectations(t)
 	})
-	req := httptest.NewRequest("PUT", "/profile", bytes.NewBuffer(reqBody))
-	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := app.Test(req)
-	if err != nil {
-		t.Fatalf("Failed to test request: %v", err)
-	}
+	t.Run("error with invalid email", func(t *testing.T) {
+		mockService := new(MockUserService)
+		handler := NewUserHandler(mockService)
+		app := setupTestApp()
+		app.Post("/register", handler.Register)
 
-	if resp.StatusCode != fiber.StatusBadRequest {
-		t.Errorf("Expected status %d, got %d", fiber.StatusBadRequest, resp.StatusCode)
-	}
+		requestBody := map[string]string{
+			"email":    "invalid-email",
+			"password": "password123",
+			"name":     "Test User",
+			"phone":    "1234567890",
+		}
+		body, _ := json.Marshal(requestBody)
+
+		req := httptest.NewRequest("POST", "/register", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := app.Test(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
+
+		var response Response
+		json.NewDecoder(resp.Body).Decode(&response)
+
+		assert.False(t, response.Success)
+		mockService.AssertExpectations(t)
+	})
+
+	t.Run("error when email already exists", func(t *testing.T) {
+		mockService := new(MockUserService)
+		handler := NewUserHandler(mockService)
+		app := setupTestApp()
+		app.Post("/register", handler.Register)
+
+		mockService.On("Register", mock.Anything, "existing@example.com", "password123", "Test User", "1234567890").
+			Return(nil, service.ErrEmailAlreadyExists)
+
+		requestBody := map[string]string{
+			"email":    "existing@example.com",
+			"password": "password123",
+			"name":     "Test User",
+			"phone":    "1234567890",
+		}
+		body, _ := json.Marshal(requestBody)
+
+		req := httptest.NewRequest("POST", "/register", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := app.Test(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		assert.Equal(t, fiber.StatusConflict, resp.StatusCode)
+
+		var response Response
+		json.NewDecoder(resp.Body).Decode(&response)
+
+		assert.False(t, response.Success)
+		assert.Contains(t, response.Error, "already exists")
+		mockService.AssertExpectations(t)
+	})
+
+	t.Run("error with weak password", func(t *testing.T) {
+		mockService := new(MockUserService)
+		handler := NewUserHandler(mockService)
+		app := setupTestApp()
+		app.Post("/register", handler.Register)
+
+		mockService.On("Register", mock.Anything, "test@example.com", "weak", "Test User", "1234567890").
+			Return(nil, service.ErrWeakPassword)
+
+		requestBody := map[string]string{
+			"email":    "test@example.com",
+			"password": "weak",
+			"name":     "Test User",
+			"phone":    "1234567890",
+		}
+		body, _ := json.Marshal(requestBody)
+
+		req := httptest.NewRequest("POST", "/register", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := app.Test(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
+		mockService.AssertExpectations(t)
+	})
 }
 
-// Test RegisterRoutes function
-func TestRegisterRoutes(t *testing.T) {
-	app := fiber.New()
-	handler := NewUserHandler(nil)
-	
-	// Create a dummy auth middleware
-	authMiddleware := func(c *fiber.Ctx) error {
-		return c.Next()
-	}
+func TestLoginHandler(t *testing.T) {
+	t.Run("successfully login with valid credentials", func(t *testing.T) {
+		mockService := new(MockUserService)
+		handler := NewUserHandler(mockService)
+		app := setupTestApp()
+		app.Post("/login", handler.Login)
 
-	// This should not panic
-	RegisterRoutes(app, handler, authMiddleware)
+		userID := uuid.New().String()
+		token := "valid-jwt-token"
+		user := &model.User{
+			ID:    uuid.MustParse(userID),
+			Email: "test@example.com",
+			Name:  "Test User",
+			Phone: "1234567890",
+		}
 
-	// Verify routes are registered (by testing a request)
-	req := httptest.NewRequest("POST", "/api/v1/register", bytes.NewBuffer([]byte("{}")))
-	req.Header.Set("Content-Type", "application/json")
+		mockService.On("Login", mock.Anything, "test@example.com", "password123").
+			Return(token, nil)
+		mockService.On("ValidateToken", token).Return(userID, nil)
+		mockService.On("GetProfile", mock.Anything, userID).Return(user, nil)
 
-	resp, err := app.Test(req)
-	if err != nil {
-		t.Fatalf("Failed to test request: %v", err)
-	}
+		requestBody := map[string]string{
+			"email":    "test@example.com",
+			"password": "password123",
+		}
+		body, _ := json.Marshal(requestBody)
 
-	// Should get a response (even if it's an error)
-	if resp == nil {
-		t.Error("Expected a response")
-	}
+		req := httptest.NewRequest("POST", "/login", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := app.Test(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		assert.Equal(t, fiber.StatusOK, resp.StatusCode)
+
+		var response Response
+		json.NewDecoder(resp.Body).Decode(&response)
+
+		assert.True(t, response.Success)
+		assert.NotNil(t, response.Data)
+		mockService.AssertExpectations(t)
+	})
+
+	t.Run("error with invalid credentials", func(t *testing.T) {
+		mockService := new(MockUserService)
+		handler := NewUserHandler(mockService)
+		app := setupTestApp()
+		app.Post("/login", handler.Login)
+
+		mockService.On("Login", mock.Anything, "test@example.com", "wrongpassword").
+			Return("", service.ErrInvalidCredentials)
+
+		requestBody := map[string]string{
+			"email":    "test@example.com",
+			"password": "wrongpassword",
+		}
+		body, _ := json.Marshal(requestBody)
+
+		req := httptest.NewRequest("POST", "/login", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := app.Test(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		assert.Equal(t, fiber.StatusUnauthorized, resp.StatusCode)
+
+		var response Response
+		json.NewDecoder(resp.Body).Decode(&response)
+
+		assert.False(t, response.Success)
+		mockService.AssertExpectations(t)
+	})
+
+	t.Run("error with invalid request body", func(t *testing.T) {
+		mockService := new(MockUserService)
+		handler := NewUserHandler(mockService)
+		app := setupTestApp()
+		app.Post("/login", handler.Login)
+
+		req := httptest.NewRequest("POST", "/login", bytes.NewReader([]byte("invalid")))
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := app.Test(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
+	})
 }
 
-// Benchmark tests
-func BenchmarkFormatValidationError(b *testing.B) {
-	err := fiber.NewError(fiber.StatusBadRequest, "test error")
-	for i := 0; i < b.N; i++ {
-		formatValidationError(err)
-	}
+func TestGetProfileHandler(t *testing.T) {
+	t.Run("successfully get profile with valid token", func(t *testing.T) {
+		mockService := new(MockUserService)
+		handler := NewUserHandler(mockService)
+		app := setupTestApp()
+
+		userID := uuid.New().String()
+		user := &model.User{
+			ID:    uuid.MustParse(userID),
+			Email: "test@example.com",
+			Name:  "Test User",
+			Phone: "1234567890",
+		}
+
+		mockService.On("GetProfile", mock.Anything, userID).Return(user, nil)
+
+		app.Get("/profile", func(c *fiber.Ctx) error {
+			c.Locals("userID", userID)
+			return handler.GetProfile(c)
+		})
+
+		req := httptest.NewRequest("GET", "/profile", nil)
+		resp, err := app.Test(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		assert.Equal(t, fiber.StatusOK, resp.StatusCode)
+
+		var response Response
+		json.NewDecoder(resp.Body).Decode(&response)
+
+		assert.True(t, response.Success)
+		assert.NotNil(t, response.Data)
+		mockService.AssertExpectations(t)
+	})
+
+	t.Run("error when user ID not in context", func(t *testing.T) {
+		mockService := new(MockUserService)
+		handler := NewUserHandler(mockService)
+		app := setupTestApp()
+		app.Get("/profile", handler.GetProfile)
+
+		req := httptest.NewRequest("GET", "/profile", nil)
+		resp, err := app.Test(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		assert.Equal(t, fiber.StatusUnauthorized, resp.StatusCode)
+	})
+
+	t.Run("error when user not found", func(t *testing.T) {
+		mockService := new(MockUserService)
+		handler := NewUserHandler(mockService)
+		app := setupTestApp()
+
+		userID := uuid.New().String()
+		mockService.On("GetProfile", mock.Anything, userID).
+			Return(nil, service.ErrUserNotFound)
+
+		app.Get("/profile", func(c *fiber.Ctx) error {
+			c.Locals("userID", userID)
+			return handler.GetProfile(c)
+		})
+
+		req := httptest.NewRequest("GET", "/profile", nil)
+		resp, err := app.Test(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		assert.Equal(t, fiber.StatusNotFound, resp.StatusCode)
+		mockService.AssertExpectations(t)
+	})
 }
 
-func BenchmarkNewUserHandler(b *testing.B) {
-	for i := 0; i < b.N; i++ {
-		NewUserHandler(nil)
-	}
-}
+func TestUpdateProfileHandler(t *testing.T) {
+	t.Run("successfully update profile", func(t *testing.T) {
+		mockService := new(MockUserService)
+		handler := NewUserHandler(mockService)
+		app := setupTestApp()
 
-// Note: Full integration tests would require:
-// 1. Mock service implementation
-// 2. Test database setup
-// 3. Complete request/response flow testing
-// 4. Authentication middleware testing
-//
-// Consider using:
-// - github.com/stretchr/testify/mock for mocking
-// - github.com/stretchr/testify/assert for assertions
-// - Complete service mocks for isolated handler testing
+		userID := uuid.New().String()
+		updatedUser := &model.User{
+			ID:    uuid.MustParse(userID),
+			Email: "test@example.com",
+			Name:  "Updated Name",
+			Phone: "9876543210",
+		}
+
+		mockService.On("UpdateProfile", mock.Anything, userID, "Updated Name", "9876543210").
+			Return(updatedUser, nil)
+
+		app.Put("/profile", func(c *fiber.Ctx) error {
+			c.Locals("userID", userID)
+			return handler.UpdateProfile(c)
+		})
+
+		requestBody := map[string]string{
+			"name":  "Updated Name",
+			"phone": "9876543210",
+		}
+		body, _ := json.Marshal(requestBody)
+
+		req := httptest.NewRequest("PUT", "/profile", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := app.Test(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		assert.Equal(t, fiber.StatusOK, resp.StatusCode)
+
+		var response Response
+		json.NewDecoder(resp.Body).Decode(&response)
+
+		assert.True(t, response.Success)
+		mockService.AssertExpectations(t)
+	})
+
+	t.Run("error when user ID not in context", func(t *testing.T) {
+		mockService := new(MockUserService)
+		handler := NewUserHandler(mockService)
+		app := setupTestApp()
+		app.Put("/profile", handler.UpdateProfile)
+
+		requestBody := map[string]string{
+			"name": "Updated Name",
+		}
+		body, _ := json.Marshal(requestBody)
+
+		req := httptest.NewRequest("PUT", "/profile", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := app.Test(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		assert.Equal(t, fiber.StatusUnauthorized, resp.StatusCode)
+	})
+
+	t.Run("error with invalid request body", func(t *testing.T) {
+		mockService := new(MockUserService)
+		handler := NewUserHandler(mockService)
+		app := setupTestApp()
+
+		userID := uuid.New().String()
+
+		app.Put("/profile", func(c *fiber.Ctx) error {
+			c.Locals("userID", userID)
+			return handler.UpdateProfile(c)
+		})
+
+		req := httptest.NewRequest("PUT", "/profile", bytes.NewReader([]byte("invalid")))
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := app.Test(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
+	})
+
+	t.Run("error when no fields provided", func(t *testing.T) {
+		mockService := new(MockUserService)
+		handler := NewUserHandler(mockService)
+		app := setupTestApp()
+
+		userID := uuid.New().String()
+
+		app.Put("/profile", func(c *fiber.Ctx) error {
+			c.Locals("userID", userID)
+			return handler.UpdateProfile(c)
+		})
+
+		requestBody := map[string]string{}
+		body, _ := json.Marshal(requestBody)
+
+		req := httptest.NewRequest("PUT", "/profile", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := app.Test(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
+	})
+
+	t.Run("error when user not found", func(t *testing.T) {
+		mockService := new(MockUserService)
+		handler := NewUserHandler(mockService)
+		app := setupTestApp()
+
+		userID := uuid.New().String()
+
+		mockService.On("UpdateProfile", mock.Anything, userID, "New Name", "").
+			Return(nil, service.ErrUserNotFound)
+
+		app.Put("/profile", func(c *fiber.Ctx) error {
+			c.Locals("userID", userID)
+			return handler.UpdateProfile(c)
+		})
+
+		requestBody := map[string]string{
+			"name": "New Name",
+		}
+		body, _ := json.Marshal(requestBody)
+
+		req := httptest.NewRequest("PUT", "/profile", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := app.Test(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		assert.Equal(t, fiber.StatusNotFound, resp.StatusCode)
+		mockService.AssertExpectations(t)
+	})
+
+	t.Run("error for internal server error", func(t *testing.T) {
+		mockService := new(MockUserService)
+		handler := NewUserHandler(mockService)
+		app := setupTestApp()
+
+		userID := uuid.New().String()
+
+		mockService.On("UpdateProfile", mock.Anything, userID, "New Name", "").
+			Return(nil, errors.New("database error"))
+
+		app.Put("/profile", func(c *fiber.Ctx) error {
+			c.Locals("userID", userID)
+			return handler.UpdateProfile(c)
+		})
+
+		requestBody := map[string]string{
+			"name": "New Name",
+		}
+		body, _ := json.Marshal(requestBody)
+
+		req := httptest.NewRequest("PUT", "/profile", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := app.Test(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		assert.Equal(t, fiber.StatusInternalServerError, resp.StatusCode)
+		mockService.AssertExpectations(t)
+	})
+}
