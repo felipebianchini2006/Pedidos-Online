@@ -1,13 +1,65 @@
 <!doctype html>
-<html lang="en">
+<html lang="pt-BR">
   <head>
     <meta charset="UTF-8" />
+    
+    <!-- Favicon -->
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    
+    <!-- Viewport -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>frontend</title>
+    
+    <!-- SEO Meta Tags -->
+    <meta name="description" content="Sistema de pedidos online para gerenciar seus pedidos de forma simples e eficiente. Faça pedidos, acompanhe entregas e gerencie seu perfil." />
+    <meta name="keywords" content="pedidos online, e-commerce, delivery, gerenciamento de pedidos, sistema de pedidos" />
+    <meta name="author" content="Pedidos Online" />
+    <meta name="robots" content="index, follow" />
+    
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://pedidosonline.com/" />
+    <meta property="og:title" content="Pedidos Online - Sistema de Gerenciamento de Pedidos" />
+    <meta property="og:description" content="Gerencie seus pedidos online de forma simples e eficiente. Crie pedidos, acompanhe entregas em tempo real." />
+    <meta property="og:image" content="https://pedidosonline.com/og-image.jpg" />
+    <meta property="og:locale" content="pt_BR" />
+    
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:url" content="https://pedidosonline.com/" />
+    <meta name="twitter:title" content="Pedidos Online - Sistema de Gerenciamento de Pedidos" />
+    <meta name="twitter:description" content="Gerencie seus pedidos online de forma simples e eficiente." />
+    <meta name="twitter:image" content="https://pedidosonline.com/twitter-image.jpg" />
+    
+    <!-- Theme Color -->
+    <meta name="theme-color" content="#2563eb" />
+    <meta name="msapplication-TileColor" content="#2563eb" />
+    
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="/manifest.json" />
+    
+    <!-- Title -->
+    <title>Pedidos Online - Sistema de Gerenciamento de Pedidos</title>
+    
+    <!-- Preconnect to API -->
+    <link rel="preconnect" href="https://api.pedidosonline.com" crossorigin />
+    
+    <!-- DNS Prefetch -->
+    <link rel="dns-prefetch" href="https://viacep.com.br" />
   </head>
   <body>
+    <!-- Root element -->
     <div id="root"></div>
+    
+    <!-- Fallback for users without JavaScript -->
+    <noscript>
+      <div style="text-align: center; padding: 2rem; font-family: system-ui, -apple-system, sans-serif;">
+        <h1>JavaScript Necessário</h1>
+        <p>Por favor, habilite o JavaScript no seu navegador para usar o sistema de Pedidos Online.</p>
+      </div>
+    </noscript>
+    
+    <!-- Main application script -->
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

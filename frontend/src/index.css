@@ -245,6 +245,88 @@ h1, h2, h3, h4, h5, h6 {
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+/* ==================== ACESSIBILIDADE ==================== */
+
+/* Foco visível para navegação por teclado */
+*:focus-visible {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+  border-radius: 0.25rem;
+}
+
+/* Remove outline padrão apenas quando não for teclado */
+*:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* Links acessíveis */
+a:focus-visible {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+}
+
+/* Botões acessíveis */
+button:focus-visible,
+[role="button"]:focus-visible {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+}
+
+/* Inputs acessíveis */
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+}
+
+/* Skip to content link (acessibilidade) */
+.skip-to-content {
+  position: absolute;
+  left: -9999px;
+  z-index: 999;
+  padding: 1rem;
+  background-color: #3b82f6;
+  color: white;
+  text-decoration: none;
+}
+
+.skip-to-content:focus {
+  left: 50%;
+  transform: translateX(-50%);
+  top: 1rem;
+}
+
+/* Melhor contraste para textos */
+.text-high-contrast {
+  color: #111827;
+}
+
+/* Screen reader only */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+/* Animações respeitam preferências do usuário */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 /* Suporte para dark mode (futuro) */
 @media (prefers-color-scheme: dark) {
   /* Estilos dark mode podem ser adicionados aqui no futuro */

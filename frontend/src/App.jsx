@@ -1,12 +1,17 @@
 import { Routes, Route } from 'react-router-dom';
+import { lazy, Suspense } from 'react';
 import { Toaster } from 'react-hot-toast';
 import { AuthProvider } from './context/AuthContext';
-import Login from './components/Auth/Login';
-import Register from './components/Auth/Register';
-import { Layout, ProtectedRoute, ErrorBoundary } from './components/Layout';
-import { OrderList, OrderForm, OrderDetails } from './components/Orders';
-import Profile from './components/Profile/Profile';
-import NotFound from './components/NotFound/NotFound';
+import { Layout, ProtectedRoute, ErrorBoundary, LoadingSpinner } from './components/Layout';
+
+// Lazy load components for code splitting
+const Login = lazy(() => import('./components/Auth/Login'));
+const Register = lazy(() => import('./components/Auth/Register'));
+const OrderList = lazy(() => import('./components/Orders/OrderList'));
+const OrderForm = lazy(() => import('./components/Orders/OrderForm'));
+const OrderDetails = lazy(() => import('./components/Orders/OrderDetails'));
+const Profile = lazy(() => import('./components/Profile/Profile'));
+const NotFound = lazy(() => import('./components/NotFound/NotFound'));
 
 /**
  * App Component
@@ -42,12 +47,17 @@ function App() {
           }}
         />
 
-        {/* Rotas da Aplicação */}
-        <Routes>
-          {/* ==================== ROTAS PÚBLICAS ==================== */}
-          {/* Sem layout - apenas o componente */}
-          <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
+        {/* Rotas da Aplicação com Suspense para lazy loading */}
+        <Suspense fallback={
+          <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-50">
+            <LoadingSpinner size="large" text="Carregando..." />
+          </div>
+        }>
+          <Routes>
+            {/* ==================== ROTAS PÚBLICAS ==================== */}
+            {/* Sem layout - apenas o componente */}
+            <Route path="/login" element={<Login />} />
+            <Route path="/register" element={<Register />} />
           
           {/* ==================== ROTAS PROTEGIDAS ==================== */}
           {/* Com layout (Header + Footer) e proteção de autenticação */}
@@ -131,10 +141,11 @@ function App() {
             }
           />
           
-          {/* ==================== PÁGINA 404 ==================== */}
-          {/* Rota catch-all para páginas não encontradas */}
-          <Route path="*" element={<NotFound />} />
-        </Routes>
+            {/* ==================== PÁGINA 404 ==================== */}
+            {/* Rota catch-all para páginas não encontradas */}
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </Suspense>
       </AuthProvider>
     </ErrorBoundary>
   );
