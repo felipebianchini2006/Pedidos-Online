@@ -1,4 +1,4 @@
-.PHONY: help up down restart logs logs-service ps build build-service migrate-up migrate-down migrate-create db-seed dev-user dev-order dev-notification dev-gateway dev-frontend test test-user test-order test-notification test-frontend test-coverage lint lint-fix clean prune
+.PHONY: help up down restart logs logs-service ps build build-service init seed reset-db migrate-up migrate-down migrate-create db-seed check test-api dev-user dev-order dev-notification dev-gateway dev-frontend test test-user test-order test-notification test-frontend test-coverage lint lint-fix clean prune install-tools quick-start
 
 # Colors for better visualization
 BLUE := \033[0;34m
@@ -68,6 +68,23 @@ build-service: ## 🔧 Rebuild de um serviço específico (uso: make build-servi
 
 ##@ Database Commands
 
+init: ## 🗄️  Inicializar todos os bancos de dados (criar, migrar e popular)
+	@echo "$(GREEN)🗄️  Inicializando bancos de dados...$(NC)"
+	@bash scripts/init-db.sh
+	@echo "$(GREEN)✅ Bancos inicializados!$(NC)"
+
+seed: ## 🌱 Popular bancos com dados de teste
+	@echo "$(YELLOW)🌱 Populando bancos de dados...$(NC)"
+	@echo "$(BLUE)PostgreSQL:$(NC)"
+	@export PGPASSWORD=postgres && psql -h localhost -p 5432 -U postgres -d users_db -f scripts/seed-data.sql
+	@echo "$(BLUE)MongoDB:$(NC)"
+	@cd scripts && node seed-orders.js
+	@echo "$(GREEN)✅ Dados de teste inseridos!$(NC)"
+
+reset-db: ## 🔄 Resetar todos os bancos de dados (⚠️  APAGA TODOS OS DADOS!)
+	@echo "$(RED)🔄 Resetando bancos de dados...$(NC)"
+	@bash scripts/reset-db.sh
+
 migrate-up: ## ⬆️  Executar migrations do PostgreSQL (user-service)
 	@echo "$(GREEN)⬆️  Executando migrations...$(NC)"
 	@docker-compose exec -T user-service sh -c 'if [ -d "/app/migrations" ]; then migrate -path /app/migrations -database "postgres://postgres:postgres@postgres:5432/users_db?sslmode=disable" up; else echo "Pasta migrations não encontrada"; fi'
@@ -89,18 +106,8 @@ migrate-create: ## ✨ Criar nova migration (uso: make migrate-create NAME=creat
 		echo "Created: $${timestamp}_$(NAME).down.sql")
 	@echo "$(GREEN)✅ Migration criada em services/user-service/migrations/$(NC)"
 
-db-seed: ## 🌱 Popular banco com dados de teste
-	@echo "$(YELLOW)🌱 Populando banco de dados...$(NC)"
-	@docker-compose exec -T postgres psql -U postgres -d users_db -c "\
-		INSERT INTO users (id, email, password, name, phone, created_at, updated_at) \
-		VALUES \
-		(gen_random_uuid(), 'admin@test.com', '\$$2a\$$10\$$EXAMPLEHASH', 'Admin User', '11999999999', NOW(), NOW()), \
-		(gen_random_uuid(), 'user@test.com', '\$$2a\$$10\$$EXAMPLEHASH', 'Test User', '11988888888', NOW(), NOW()) \
-		ON CONFLICT DO NOTHING;" 2>/dev/null || echo "Tabela users não existe ainda. Execute as migrations primeiro."
-	@echo "$(GREEN)✅ Dados de teste inseridos!$(NC)"
-	@echo "$(YELLOW)💡 Credenciais de teste:$(NC)"
-	@echo "   - admin@test.com / password"
-	@echo "   - user@test.com / password"
+db-seed: ## 🌱 Popular banco com dados de teste (alias para 'seed')
+	@$(MAKE) seed
 
 ##@ Development Commands
 
@@ -153,6 +160,16 @@ dev-frontend: ## 💻 Rodar frontend localmente (fora do docker)
 	@cd frontend && \
 		export VITE_API_URL=http://localhost:8000 && \
 		npm run dev
+
+##@ Health Check Commands
+
+check: ## 🏥 Verificar saúde de todos os serviços
+	@echo "$(BLUE)🏥 Verificando saúde dos serviços...$(NC)"
+	@bash scripts/check-services.sh
+
+test-api: ## 🧪 Testar API com smoke tests
+	@echo "$(YELLOW)🧪 Executando smoke tests da API...$(NC)"
+	@bash scripts/test-api.sh
 
 ##@ Test Commands
 
@@ -262,14 +279,16 @@ install-tools: ## 📦 Instalar ferramentas de desenvolvimento necessárias
 
 quick-start: ## 🚀 Setup completo do projeto (first time setup)
 	@echo "$(GREEN)🚀 Iniciando setup completo do projeto...$(NC)"
-	@echo "$(BLUE)1/4 - Building services...$(NC)"
+	@echo "$(BLUE)1/5 - Building services...$(NC)"
 	@$(MAKE) build
-	@echo "$(BLUE)2/4 - Starting containers...$(NC)"
+	@echo "$(BLUE)2/5 - Starting containers...$(NC)"
 	@$(MAKE) up
-	@echo "$(BLUE)3/4 - Waiting for services to be healthy...$(NC)"
+	@echo "$(BLUE)3/5 - Waiting for services to be healthy...$(NC)"
 	@sleep 15
-	@echo "$(BLUE)4/4 - Running migrations...$(NC)"
-	@$(MAKE) migrate-up || echo "Migrations não disponíveis ainda"
+	@echo "$(BLUE)4/5 - Initializing databases...$(NC)"
+	@$(MAKE) init || echo "Erro ao inicializar bancos de dados"
+	@echo "$(BLUE)5/5 - Checking services health...$(NC)"
+	@$(MAKE) check || echo "Alguns serviços podem não estar prontos ainda"
 	@echo "$(GREEN)✅ Setup completo!$(NC)"
 	@echo ""
 	@echo "$(YELLOW)════════════════════════════════════════════════════════════$(NC)"
@@ -281,6 +300,8 @@ quick-start: ## 🚀 Setup completo do projeto (first time setup)
 	@echo "   - RabbitMQ Management: http://localhost:15672 (guest/guest)"
 	@echo ""
 	@echo "$(YELLOW)📚 Comandos úteis:$(NC)"
+	@echo "   - make check        - Verificar saúde dos serviços"
+	@echo "   - make test-api     - Testar API"
 	@echo "   - make logs         - Ver logs"
 	@echo "   - make ps           - Ver status"
 	@echo "   - make test         - Rodar testes"
