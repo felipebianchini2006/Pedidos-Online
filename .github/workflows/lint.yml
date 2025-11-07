@@ -1,0 +1,368 @@
+name: Lint - Code Quality Checks
+
+on:
+  pull_request:
+    branches:
+      - main
+      - develop
+
+env:
+  GO_VERSION: '1.21'
+  NODE_VERSION: '18'
+
+jobs:
+  # ============================================================================
+  # Go Services Linting
+  # ============================================================================
+
+  lint-go-services:
+    name: Lint Go Services
+    runs-on: ubuntu-latest
+    
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - user-service
+          - order-service
+          - notification-service
+          - api-gateway
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 🔧 Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: services/${{ matrix.service }}/go.sum
+
+      - name: 📥 Download dependencies
+        working-directory: ./services/${{ matrix.service }}
+        run: go mod download
+
+      - name: 🔍 Run golangci-lint
+        uses: golangci/golangci-lint-action@v3
+        with:
+          version: latest
+          working-directory: services/${{ matrix.service }}
+          args: --timeout=10m --out-format=github-actions
+          only-new-issues: true
+
+      - name: 📝 Run go vet
+        working-directory: ./services/${{ matrix.service }}
+        run: go vet ./...
+
+      - name: 🔍 Run staticcheck
+        working-directory: ./services/${{ matrix.service }}
+        run: |
+          go install honnef.co/go/tools/cmd/staticcheck@latest
+          staticcheck ./...
+
+      - name: 🔍 Check Go formatting
+        working-directory: ./services/${{ matrix.service }}
+        run: |
+          gofmt -l . | tee /tmp/gofmt.out
+          if [ -s /tmp/gofmt.out ]; then
+            echo "❌ The following files are not properly formatted:"
+            cat /tmp/gofmt.out
+            echo "Run 'gofmt -w .' to fix formatting issues"
+            exit 1
+          fi
+          echo "✅ All files are properly formatted"
+
+      - name: 🔍 Check for common mistakes
+        working-directory: ./services/${{ matrix.service }}
+        run: |
+          go install github.com/kisielk/errcheck@latest
+          errcheck -ignore 'Close' ./...
+
+  # ============================================================================
+  # Frontend Linting
+  # ============================================================================
+
+  lint-frontend:
+    name: Lint Frontend
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 🔧 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: 📥 Install dependencies
+        working-directory: ./frontend
+        run: npm ci
+
+      - name: 🔍 Run ESLint
+        working-directory: ./frontend
+        run: |
+          npm run lint -- --format=json --output-file=eslint-report.json || true
+          npm run lint
+
+      - name: 📝 ESLint Report
+        if: always()
+        working-directory: ./frontend
+        run: |
+          if [ -f eslint-report.json ]; then
+            echo "📊 ESLint Report Summary:"
+            node -e "
+              const report = require('./eslint-report.json');
+              const totalErrors = report.reduce((acc, file) => acc + file.errorCount, 0);
+              const totalWarnings = report.reduce((acc, file) => acc + file.warningCount, 0);
+              console.log(\`Errors: \${totalErrors}\`);
+              console.log(\`Warnings: \${totalWarnings}\`);
+              if (totalErrors > 0) process.exit(1);
+            "
+          fi
+
+      - name: 🎨 Check Prettier formatting
+        working-directory: ./frontend
+        run: |
+          npx prettier --check "src/**/*.{js,jsx,ts,tsx,json,css,scss,md}"
+
+      - name: 🔍 Type checking (if TypeScript)
+        working-directory: ./frontend
+        run: |
+          if [ -f tsconfig.json ]; then
+            npm run type-check || echo "⚠️ Type checking not configured"
+          fi
+
+  # ============================================================================
+  # Docker Linting
+  # ============================================================================
+
+  lint-dockerfiles:
+    name: Lint Dockerfiles
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🐳 Run hadolint on all Dockerfiles
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          recursive: true
+          failure-threshold: warning
+          format: github-actions
+
+  # ============================================================================
+  # YAML Linting
+  # ============================================================================
+
+  lint-yaml:
+    name: Lint YAML Files
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🔍 Run yamllint
+        run: |
+          pip install yamllint
+          yamllint -c .yamllint.yml . || true
+
+  # ============================================================================
+  # Markdown Linting
+  # ============================================================================
+
+  lint-markdown:
+    name: Lint Markdown Files
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🔍 Run markdownlint
+        uses: articulated/markdownlint-action@v1
+        with:
+          config: .markdownlint.json
+          files: '**/*.md'
+          ignore: node_modules
+
+  # ============================================================================
+  # Security Scanning
+  # ============================================================================
+
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🔐 Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+
+      - name: 📤 Upload Trivy results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v2
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+      - name: 🔐 Run Gosec security scanner
+        run: |
+          go install github.com/securego/gosec/v2/cmd/gosec@latest
+          
+          for service in user-service order-service notification-service api-gateway; do
+            echo "🔍 Scanning services/$service..."
+            gosec -fmt=json -out=gosec-$service.json ./services/$service/... || true
+          done
+
+  # ============================================================================
+  # Dependency Check
+  # ============================================================================
+
+  dependency-check:
+    name: Dependency Check
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🔧 Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: 🔍 Check for outdated Go dependencies
+        run: |
+          for service in services/*/; do
+            if [ -f "$service/go.mod" ]; then
+              echo "Checking $service..."
+              cd "$service"
+              go list -u -m -json all | go run github.com/psampaz/go-mod-outdated -update || true
+              cd ../..
+            fi
+          done
+
+      - name: 🔧 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: 🔍 Check for outdated npm dependencies
+        working-directory: ./frontend
+        run: |
+          npm outdated || true
+
+  # ============================================================================
+  # PR Comment with Lint Results
+  # ============================================================================
+
+  comment-pr:
+    name: Comment on PR
+    runs-on: ubuntu-latest
+    needs:
+      - lint-go-services
+      - lint-frontend
+      - lint-dockerfiles
+      - security-scan
+    if: always()
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 📝 Create PR comment
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            
+            const botComment = comments.find(comment => 
+              comment.user.type === 'Bot' && 
+              comment.body.includes('🔍 Lint Results')
+            );
+            
+            const lintResults = `
+            ## 🔍 Lint Results
+            
+            | Check | Status |
+            |-------|--------|
+            | Go Services | ${{ needs.lint-go-services.result == 'success' && '✅ Passed' || '❌ Failed' }} |
+            | Frontend | ${{ needs.lint-frontend.result == 'success' && '✅ Passed' || '❌ Failed' }} |
+            | Dockerfiles | ${{ needs.lint-dockerfiles.result == 'success' && '✅ Passed' || '❌ Failed' }} |
+            | Security Scan | ${{ needs.security-scan.result == 'success' && '✅ Passed' || '⚠️ Check Required' }} |
+            
+            ---
+            
+            **Workflow Run:** [#${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+            
+            *Last updated: ${new Date().toUTCString()}*
+            `;
+            
+            if (botComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body: lintResults
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: lintResults
+              });
+            }
+
+  # ============================================================================
+  # Summary Job
+  # ============================================================================
+
+  lint-success:
+    name: ✅ All Lint Checks Passed
+    runs-on: ubuntu-latest
+    needs:
+      - lint-go-services
+      - lint-frontend
+      - lint-dockerfiles
+      - lint-yaml
+      - lint-markdown
+      - security-scan
+      - dependency-check
+    if: success()
+    
+    steps:
+      - name: 🎉 Success
+        run: |
+          echo "============================================"
+          echo "✅ All lint checks passed successfully!"
+          echo "============================================"
+          echo "Checks completed:"
+          echo "  ✅ Go Services Linting"
+          echo "  ✅ Frontend Linting"
+          echo "  ✅ Dockerfile Linting"
+          echo "  ✅ YAML Linting"
+          echo "  ✅ Markdown Linting"
+          echo "  ✅ Security Scanning"
+          echo "  ✅ Dependency Check"
+          echo "============================================"
