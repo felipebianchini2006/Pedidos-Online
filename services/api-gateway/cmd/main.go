@@ -95,31 +95,9 @@ func setupMiddlewares(app *fiber.App, cfg *config.Config) {
 		log.Printf("✅ CORS habilitado: %v", cfg.AllowedOrigins)
 	}
 
-	// Request ID middleware - Adiciona UUID único em cada request
-	app.Use(middleware.NewRequestIDMiddleware())
-	log.Println("✅ Request ID middleware habilitado (UUID v4)")
-
-	// Inicializar structured logger (level: info, format: json)
-	middleware.InitLogger("info", true)
-
-	// Structured Logger middleware - Substitui o logger antigo
-	app.Use(middleware.NewStructuredLoggerMiddleware())
-	log.Println("✅ Structured logging habilitado (logrus JSON)")
-
-	// Metrics middleware - Coleta métricas de todas as requests
-	app.Use(middleware.NewMetricsMiddleware())
-	log.Println("✅ Metrics middleware habilitado (thread-safe)")
-
-	// Expor endpoint de métricas
-	app.Get("/metrics", func(c *fiber.Ctx) error {
-		snapshot := middleware.GetMetrics().GetSnapshot()
-		return c.JSON(snapshot)
-	})
-	log.Println("✅ Endpoint /metrics exposto")
-
-	// Expor dashboard de observabilidade
-	app.Get("/dashboard", middleware.DashboardHandler())
-	log.Println("✅ Dashboard de observabilidade disponível em /dashboard")
+	// Logger middleware - Log estruturado de todas as requests
+	app.Use(middleware.NewDetailedLoggerMiddleware())
+	log.Println("✅ Logger middleware habilitado (formato JSON)")
 
 	// Rate limit middleware
 	if cfg.EnableRateLimit {
@@ -140,8 +118,6 @@ func setupRoutes(app *fiber.App, cfg *config.Config) {
 			"message": "API Gateway - Centralized routing for microservices",
 			"endpoints": fiber.Map{
 				"health":        "/health",
-				"metrics":       "/metrics",
-				"dashboard":     "/dashboard",
 				"user_service":  "/api/users/*",
 				"order_service": "/api/orders/*",
 			},
@@ -175,8 +151,6 @@ func setupRoutes(app *fiber.App, cfg *config.Config) {
 	log.Println("✅ Rotas configuradas:")
 	log.Println("   GET  / → Gateway info")
 	log.Println("   GET  /health → Health check")
-	log.Println("   GET  /metrics → Métricas (JSON)")
-	log.Println("   GET  /dashboard → Dashboard de observabilidade")
 	log.Println("   ALL  /api/users/* → User Service")
 	log.Println("   ALL  /api/orders/* → Order Service")
 }
