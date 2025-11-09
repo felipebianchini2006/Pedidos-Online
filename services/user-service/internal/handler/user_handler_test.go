@@ -2,6 +2,7 @@ package handler
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http/httptest"
@@ -22,7 +23,7 @@ type MockUserService struct {
 	mock.Mock
 }
 
-func (m *MockUserService) Register(ctx interface{}, email, password, name, phone string) (*model.User, error) {
+func (m *MockUserService) Register(ctx context.Context, email, password, name, phone string) (*model.User, error) {
 	args := m.Called(ctx, email, password, name, phone)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
@@ -30,12 +31,12 @@ func (m *MockUserService) Register(ctx interface{}, email, password, name, phone
 	return args.Get(0).(*model.User), args.Error(1)
 }
 
-func (m *MockUserService) Login(ctx interface{}, email, password string) (string, error) {
+func (m *MockUserService) Login(ctx context.Context, email, password string) (string, error) {
 	args := m.Called(ctx, email, password)
 	return args.String(0), args.Error(1)
 }
 
-func (m *MockUserService) GetProfile(ctx interface{}, userID string) (*model.User, error) {
+func (m *MockUserService) GetProfile(ctx context.Context, userID string) (*model.User, error) {
 	args := m.Called(ctx, userID)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
@@ -43,7 +44,7 @@ func (m *MockUserService) GetProfile(ctx interface{}, userID string) (*model.Use
 	return args.Get(0).(*model.User), args.Error(1)
 }
 
-func (m *MockUserService) UpdateProfile(ctx interface{}, userID, name, phone string) (*model.User, error) {
+func (m *MockUserService) UpdateProfile(ctx context.Context, userID, name, phone string) (*model.User, error) {
 	args := m.Called(ctx, userID, name, phone)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
@@ -206,9 +207,8 @@ func TestRegisterHandler(t *testing.T) {
 		app := setupTestApp()
 		app.Post("/register", handler.Register)
 
-		mockService.On("Register", mock.Anything, "test@example.com", "weak", "Test User", "1234567890").
-			Return(nil, service.ErrWeakPassword)
-
+		// Password "weak" has only 4 characters, validator requires min=8
+		// So the service will never be called, validation fails first
 		requestBody := map[string]string{
 			"email":    "test@example.com",
 			"password": "weak",
@@ -225,6 +225,12 @@ func TestRegisterHandler(t *testing.T) {
 		defer resp.Body.Close()
 
 		assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
+
+		var response Response
+		json.NewDecoder(resp.Body).Decode(&response)
+
+		assert.False(t, response.Success)
+		assert.Contains(t, response.Error, "Password")
 		mockService.AssertExpectations(t)
 	})
 }
