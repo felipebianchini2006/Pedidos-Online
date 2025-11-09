@@ -1,4 +1,4 @@
-.PHONY: help up down restart logs logs-service ps build build-service init seed reset-db migrate-up migrate-down migrate-create db-seed check test-api dev-user dev-order dev-notification dev-gateway dev-frontend test test-user test-order test-notification test-frontend test-coverage lint lint-fix clean prune install-tools quick-start
+.PHONY: help up down restart logs logs-service ps build build-service init seed reset-db migrate-up migrate-down migrate-create db-seed check test-api dev-user dev-order dev-notification dev-gateway dev-frontend test test-user test-order test-notification test-frontend test-coverage test-integration test-integration-short test-integration-verbose test-integration-keep test-integration-skip-build test-integration-clean test-all lint lint-fix clean prune install-tools quick-start
 
 # Colors for better visualization
 BLUE := \033[0;34m
@@ -210,6 +210,46 @@ test-coverage: ## 📊 Gerar relatório de cobertura
 	@cd services/notification-service && go test -coverprofile=../../coverage/notification-service.out ./... && \
 		go tool cover -html=../../coverage/notification-service.out -o ../../coverage/notification-service.html || true
 	@echo "$(GREEN)✅ Relatórios gerados em ./coverage/$(NC)"
+
+##@ Integration Test Commands
+
+test-integration: ## 🔗 Rodar testes de integração end-to-end
+	@echo "$(YELLOW)🔗 Executando testes de integração...$(NC)"
+	@bash tests/run-integration-tests.sh
+	@echo "$(GREEN)✅ Testes de integração concluídos!$(NC)"
+
+test-integration-short: ## 🔗 Rodar testes de integração (modo curto - pula testes de carga)
+	@echo "$(YELLOW)🔗 Executando testes de integração (modo curto)...$(NC)"
+	@bash tests/run-integration-tests.sh --short
+	@echo "$(GREEN)✅ Testes de integração (curto) concluídos!$(NC)"
+
+test-integration-verbose: ## 🔗 Rodar testes de integração com saída verbosa
+	@echo "$(YELLOW)🔗 Executando testes de integração (verbose)...$(NC)"
+	@bash tests/run-integration-tests.sh --verbose
+	@echo "$(GREEN)✅ Testes de integração concluídos!$(NC)"
+
+test-integration-keep: ## 🔗 Rodar testes de integração e manter containers rodando
+	@echo "$(YELLOW)🔗 Executando testes de integração (mantendo containers)...$(NC)"
+	@bash tests/run-integration-tests.sh --keep-running
+	@echo "$(GREEN)✅ Testes concluídos - containers ainda rodando!$(NC)"
+	@echo "$(YELLOW)💡 Para parar: docker-compose -f docker-compose.test.yml down -v$(NC)"
+
+test-integration-skip-build: ## 🔗 Rodar testes de integração sem rebuild
+	@echo "$(YELLOW)🔗 Executando testes de integração (sem rebuild)...$(NC)"
+	@bash tests/run-integration-tests.sh --skip-build
+	@echo "$(GREEN)✅ Testes de integração concluídos!$(NC)"
+
+test-integration-clean: ## 🧹 Limpar ambiente de testes de integração
+	@echo "$(RED)🧹 Limpando ambiente de testes de integração...$(NC)"
+	@docker-compose -f docker-compose.test.yml down -v --remove-orphans
+	@rm -rf tests/logs/*
+	@echo "$(GREEN)✅ Ambiente de testes limpo!$(NC)"
+
+test-all: ## 🧪 Rodar todos os testes (unitários + integração)
+	@echo "$(YELLOW)🧪 Executando todos os testes (unitários + integração)...$(NC)"
+	@$(MAKE) test
+	@$(MAKE) test-integration
+	@echo "$(GREEN)✅ Todos os testes concluídos!$(NC)"
 
 ##@ Linting Commands
 

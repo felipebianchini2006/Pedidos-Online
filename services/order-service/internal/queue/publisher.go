@@ -11,6 +11,12 @@ import (
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
+// EventPublisher define a interface para publicação de eventos
+type EventPublisher interface {
+	PublishOrderCreated(order *model.Order) error
+	PublishOrderUpdated(orderID, oldStatus, newStatus string) error
+}
+
 // Publisher gerencia a publicação de eventos no RabbitMQ
 type Publisher struct {
 	conn     *amqp.Connection

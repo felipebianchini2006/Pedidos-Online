@@ -32,11 +32,11 @@ type OrderService interface {
 // orderService implementa a interface OrderService
 type orderService struct {
 	repo      repository.OrderRepository
-	publisher *queue.Publisher
+	publisher queue.EventPublisher
 }
 
 // NewOrderService cria uma nova instância do serviço
-func NewOrderService(repo repository.OrderRepository, publisher *queue.Publisher) OrderService {
+func NewOrderService(repo repository.OrderRepository, publisher queue.EventPublisher) OrderService {
 	return &orderService{
 		repo:      repo,
 		publisher: publisher,
