@@ -56,31 +56,29 @@ func ProxyHandler(config ProxyConfig) fiber.Handler {
 		c.Locals("service_name", config.ServiceName)
 
 		// Construir URL completo do serviço de destino
-		// Remove o prefixo /api/users ou /api/orders e mantém o resto do path
+		// Remove apenas o prefixo /api/users ou /api/orders e mantém o resto do path
 		fullPath := c.Path()
 
-		// Extrair o path após o prefixo do serviço e adicionar /api/v1
-		// Ex: /api/users/register -> /api/v1/register
-		//     /api/orders/123 -> /api/v1/orders/123
+		// Extrair o path após o prefixo do serviço
+		// Ex: /api/users/v1/register -> /v1/register
+		//     /api/orders/v1/orders/123 -> /v1/orders/123
 		var servicePath string
 		if strings.HasPrefix(fullPath, "/api/users") {
-			// Remove /api/users e adiciona /api/v1
-			pathAfterPrefix := strings.TrimPrefix(fullPath, "/api/users")
-			servicePath = "/api/v1" + pathAfterPrefix
+			// Remove apenas /api/users
+			servicePath = strings.TrimPrefix(fullPath, "/api/users")
 		} else if strings.HasPrefix(fullPath, "/api/orders") {
-			// Remove /api/orders e adiciona /api/v1/orders
-			pathAfterPrefix := strings.TrimPrefix(fullPath, "/api/orders")
-			servicePath = "/api/v1/orders" + pathAfterPrefix
+			// Remove apenas /api/orders
+			servicePath = strings.TrimPrefix(fullPath, "/api/orders")
 		} else {
 			servicePath = fullPath
 		}
 
-		// Se terminou sem path, usar /
-		if servicePath == "/api/v1" || servicePath == "/api/v1/orders" {
-			servicePath += "/"
+		// Se não tem path após o prefixo, usar /
+		if servicePath == "" {
+			servicePath = "/"
 		}
 
-		targetURLComplete := targetURL + servicePath
+		targetURLComplete := targetURL + "/api" + servicePath
 
 		// Adicionar query params se existirem
 		if len(c.Request().URI().QueryString()) > 0 {

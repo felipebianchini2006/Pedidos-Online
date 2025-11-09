@@ -14,7 +14,7 @@ const authService = {
    */
   async register(email, password, name, phone) {
     try {
-      const response = await api.post('/api/users/register', {
+      const response = await api.post('/api/users/v1/register', {
         email,
         password,
         name,
@@ -41,7 +41,7 @@ const authService = {
    */
   async login(email, password) {
     try {
-      const response = await api.post('/api/users/login', {
+      const response = await api.post('/api/users/v1/login', {
         email,
         password,
       });
@@ -90,7 +90,7 @@ const authService = {
    */
   async getProfile() {
     try {
-      const response = await api.get('/api/users/profile');
+      const response = await api.get('/api/users/v1/profile');
 
       // Atualizar dados do usuário no localStorage
       if (response.data.data) {
@@ -117,7 +117,7 @@ const authService = {
    */
   async updateProfile(name, phone) {
     try {
-      const response = await api.put('/api/users/profile', {
+      const response = await api.put('/api/users/v1/profile', {
         name,
         phone,
       });

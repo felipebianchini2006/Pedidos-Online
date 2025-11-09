@@ -1,7 +1,7 @@
 # Multi-stage build for optimized production image
 
 # Stage 1: Builder - Build the React application
-FROM node:18-alpine AS builder
+FROM node:20-alpine AS builder
 
 # Set working directory
 WORKDIR /app
@@ -11,6 +11,9 @@ COPY package*.json ./
 
 # Install dependencies with clean install for reproducible builds
 RUN npm ci --silent
+
+# Install terser for production builds
+RUN npm install terser --save-dev
 
 # Copy application source code
 COPY . .

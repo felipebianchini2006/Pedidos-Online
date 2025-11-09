@@ -11,7 +11,7 @@ const orderService = {
    */
   async createOrder(orderData) {
     try {
-      const response = await api.post('/api/orders', orderData);
+      const response = await api.post('/api/orders/v1/orders', orderData);
 
       return {
         success: true,
@@ -32,7 +32,7 @@ const orderService = {
    */
   async getOrders(params = {}) {
     try {
-      const response = await api.get('/api/orders', { params });
+      const response = await api.get('/api/orders/v1/orders', { params });
 
       return {
         success: true,
@@ -53,7 +53,7 @@ const orderService = {
    */
   async getOrderById(id) {
     try {
-      const response = await api.get(`/api/orders/${id}`);
+      const response = await api.get(`/api/orders/v1/orders/${id}`);
 
       return {
         success: true,
@@ -83,7 +83,7 @@ const orderService = {
    */
   async cancelOrder(id) {
     try {
-      const response = await api.put(`/api/orders/${id}/status`, {
+      const response = await api.put(`/api/orders/v1/orders/${id}/status`, {
         status: 'cancelled',
       });
 
@@ -107,7 +107,7 @@ const orderService = {
    */
   async updateOrderStatus(id, status) {
     try {
-      const response = await api.put(`/api/orders/${id}/status`, {
+      const response = await api.put(`/api/orders/v1/orders/${id}/status`, {
         status,
       });
 
