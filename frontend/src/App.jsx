@@ -2,7 +2,7 @@ import { Routes, Route } from 'react-router-dom';
 import { lazy, Suspense } from 'react';
 import { Toaster } from 'react-hot-toast';
 import { AuthProvider } from './context/AuthContext';
-import { Layout, ProtectedRoute, ErrorBoundary, LoadingSpinner } from './components/Layout';
+import { Layout, ProtectedRoute, AdminRoute, ErrorBoundary, LoadingSpinner } from './components/Layout';
 
 // Lazy load components for code splitting
 const Login = lazy(() => import('./components/Auth/Login'));
@@ -11,6 +11,7 @@ const OrderList = lazy(() => import('./components/Orders/OrderList'));
 const OrderForm = lazy(() => import('./components/Orders/OrderForm'));
 const OrderDetails = lazy(() => import('./components/Orders/OrderDetails'));
 const Profile = lazy(() => import('./components/Profile/Profile'));
+const AdminOrders = lazy(() => import('./components/Admin/AdminOrders'));
 const NotFound = lazy(() => import('./components/NotFound/NotFound'));
 
 /**
@@ -119,6 +120,18 @@ function App() {
                   <Profile />
                 </Layout>
               </ProtectedRoute>
+            }
+          />
+          
+          {/* Admin - Gerenciar Pedidos */}
+          <Route
+            path="/admin/orders"
+            element={
+              <AdminRoute>
+                <Layout>
+                  <AdminOrders />
+                </Layout>
+              </AdminRoute>
             }
           />
           

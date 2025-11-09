@@ -24,6 +24,9 @@ type OrderRepository interface {
 	// FindByUserID busca pedidos de um usuário com paginação
 	FindByUserID(ctx context.Context, userID string, limit, skip int) ([]*model.Order, error)
 
+	// FindAll busca TODOS os pedidos (admin) com paginação
+	FindAll(ctx context.Context, limit, skip int) ([]*model.Order, error)
+
 	// Update atualiza um pedido completo
 	Update(ctx context.Context, order *model.Order) error
 
@@ -35,6 +38,9 @@ type OrderRepository interface {
 
 	// Count retorna o total de pedidos de um usuário
 	Count(ctx context.Context, userID string) (int64, error)
+
+	// CountAll retorna o total de pedidos (admin)
+	CountAll(ctx context.Context) (int64, error)
 
 	// CreateIndexes cria os índices necessários
 	CreateIndexes(ctx context.Context) error
@@ -246,6 +252,60 @@ func (r *orderRepository) Count(ctx context.Context, userID string) (int64, erro
 	count, err := r.collection.CountDocuments(ctx, bson.M{"user_id": userID})
 	if err != nil {
 		return 0, fmt.Errorf("erro ao contar pedidos: %w", err)
+	}
+
+	return count, nil
+}
+
+// FindAll busca TODOS os pedidos (admin) com paginação
+func (r *orderRepository) FindAll(ctx context.Context, limit, skip int) ([]*model.Order, error) {
+	ctx, cancel := context.WithTimeout(ctx, r.timeout)
+	defer cancel()
+
+	// Validar parâmetros de paginação
+	if limit <= 0 {
+		limit = 10 // limite padrão
+	}
+	if limit > 100 {
+		limit = 100 // limite máximo
+	}
+	if skip < 0 {
+		skip = 0
+	}
+
+	// Configurar opções de busca (SEM filtro de user_id)
+	opts := options.Find().
+		SetSort(bson.D{{Key: "created_at", Value: -1}}). // mais recentes primeiro
+		SetLimit(int64(limit)).
+		SetSkip(int64(skip))
+
+	cursor, err := r.collection.Find(ctx, bson.M{}, opts) // bson.M{} = buscar todos
+	if err != nil {
+		return nil, fmt.Errorf("erro ao buscar todos os pedidos: %w", err)
+	}
+	defer cursor.Close(ctx)
+
+	var orders []*model.Order
+	if err = cursor.All(ctx, &orders); err != nil {
+		return nil, fmt.Errorf("erro ao decodificar pedidos: %w", err)
+	}
+
+	// Retornar lista vazia ao invés de nil se não houver pedidos
+	if orders == nil {
+		orders = []*model.Order{}
+	}
+
+	return orders, nil
+}
+
+// CountAll retorna o total de pedidos (admin)
+func (r *orderRepository) CountAll(ctx context.Context) (int64, error) {
+	ctx, cancel := context.WithTimeout(ctx, r.timeout)
+	defer cancel()
+
+	count, err := r.collection.CountDocuments(ctx, bson.M{}) // bson.M{} = contar todos
+	if err != nil {
+		return 0, fmt.Errorf("erro ao contar todos os pedidos: %w", err)
 	}
 
 	return count, nil

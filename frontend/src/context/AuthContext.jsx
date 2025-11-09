@@ -21,28 +21,37 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     const initAuth = async () => {
       try {
+        console.log('[AuthContext] Inicializando autenticação...');
+        
         // Verificar se existe token
         const token = authService.getToken();
+        console.log('[AuthContext] Token encontrado:', token ? 'SIM' : 'NÃO');
         
         if (!token) {
+          console.log('[AuthContext] Nenhum token encontrado, usuário não autenticado');
           setLoading(false);
           return;
         }
 
+        console.log('[AuthContext] Buscando perfil do usuário...');
         // Buscar perfil do usuário
         const result = await authService.getProfile();
+        console.log('[AuthContext] Resultado do perfil:', result);
         
         if (result.success) {
+          console.log('[AuthContext] ✅ Perfil carregado com sucesso:', result.data);
           setUser(result.data);
           setIsAuthenticated(true);
         } else {
+          console.log('[AuthContext] ❌ Falha ao carregar perfil, limpando token');
           // Token inválido, limpar
           authService.logout();
         }
       } catch (error) {
-        console.error('Erro ao inicializar autenticação:', error);
+        console.error('[AuthContext] ❌ Erro ao inicializar autenticação:', error);
         authService.logout();
       } finally {
+        console.log('[AuthContext] Autenticação inicializada, loading=false');
         setLoading(false);
       }
     };
@@ -66,8 +75,9 @@ export function AuthProvider({ children }) {
         toast.error(result.error);
         return { success: false, error: result.error };
       }
-    } catch (error) {
+    } catch (err) {
       const errorMessage = 'Erro ao fazer login. Tente novamente.';
+      console.error('[AuthContext] Erro no login:', err);
       toast.error(errorMessage);
       return { success: false, error: errorMessage };
     }
@@ -87,8 +97,9 @@ export function AuthProvider({ children }) {
         toast.error(result.error);
         return { success: false, error: result.error };
       }
-    } catch (error) {
+    } catch (err) {
       const errorMessage = 'Erro ao registrar. Tente novamente.';
+      console.error('[AuthContext] Erro no registro:', err);
       toast.error(errorMessage);
       return { success: false, error: errorMessage };
     }
@@ -119,8 +130,9 @@ export function AuthProvider({ children }) {
         toast.error(result.error);
         return { success: false, error: result.error };
       }
-    } catch (error) {
+    } catch (err) {
       const errorMessage = 'Erro ao atualizar perfil. Tente novamente.';
+      console.error('[AuthContext] Erro ao atualizar perfil:', err);
       toast.error(errorMessage);
       return { success: false, error: errorMessage };
     }
@@ -139,7 +151,8 @@ export function AuthProvider({ children }) {
       } else {
         return { success: false, error: result.error };
       }
-    } catch (error) {
+    } catch (err) {
+      console.error('[AuthContext] Erro ao recarregar usuário:', err);
       return { success: false, error: 'Erro ao atualizar dados do usuário' };
     }
   };

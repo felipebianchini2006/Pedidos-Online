@@ -47,6 +47,27 @@ const orderService = {
   },
 
   /**
+   * Buscar TODOS os pedidos (admin)
+   * @param {Object} params - Parâmetros de busca (page, limit)
+   * @returns {Promise<{success: boolean, data?: object, error?: string}>}
+   */
+  async getAllOrders(params = {}) {
+    try {
+      const response = await api.get('/api/orders/v1/admin/orders', { params });
+
+      return {
+        success: true,
+        data: response.data.data || response.data,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error.response?.data?.error || 'Erro ao buscar pedidos',
+      };
+    }
+  },
+
+  /**
    * Buscar detalhes de um pedido específico
    * @param {string} id - ID do pedido
    * @returns {Promise<{success: boolean, data?: object, error?: string}>}

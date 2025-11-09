@@ -56,3 +56,12 @@ func GetUserID(c *fiber.Ctx) string {
 	}
 	return userID
 }
+
+// GetUserEmail extrai o email do contexto (após passar pelo AuthMiddleware)
+func GetUserEmail(c *fiber.Ctx) string {
+	email, ok := c.Locals("email").(string)
+	if !ok {
+		return ""
+	}
+	return email
+}

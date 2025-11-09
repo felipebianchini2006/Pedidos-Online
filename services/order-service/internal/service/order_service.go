@@ -22,6 +22,9 @@ type OrderService interface {
 	// ListOrders lista pedidos de um usuário com paginação
 	ListOrders(ctx context.Context, userID string, page, pageSize int) ([]*model.Order, int64, error)
 
+	// ListAllOrders lista TODOS os pedidos (admin) com paginação
+	ListAllOrders(ctx context.Context, page, pageSize int) ([]*model.Order, int64, error)
+
 	// UpdateOrderStatus atualiza o status de um pedido
 	UpdateOrderStatus(ctx context.Context, orderID, newStatus string) (*model.Order, error)
 
@@ -162,6 +165,42 @@ func (s *orderService) ListOrders(ctx context.Context, userID string, page, page
 	}
 
 	log.Printf("✅ Encontrados %d pedidos (total: %d)", len(orders), total)
+	return orders, total, nil
+}
+
+// ListAllOrders lista TODOS os pedidos (admin) com paginação
+func (s *orderService) ListAllOrders(ctx context.Context, page, pageSize int) ([]*model.Order, int64, error) {
+	log.Printf("📋 [ADMIN] Listando TODOS os pedidos (página %d, tamanho %d)", page, pageSize)
+
+	// Validar e ajustar paginação
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 {
+		pageSize = 10
+	}
+	if pageSize > 100 {
+		pageSize = 100
+	}
+
+	// Calcular skip
+	skip := (page - 1) * pageSize
+
+	// Buscar TODOS os pedidos
+	orders, err := s.repo.FindAll(ctx, pageSize, skip)
+	if err != nil {
+		log.Printf("❌ Erro ao buscar pedidos: %v", err)
+		return nil, 0, fmt.Errorf("erro ao buscar pedidos: %w", err)
+	}
+
+	// Buscar total de pedidos
+	total, err := s.repo.CountAll(ctx)
+	if err != nil {
+		log.Printf("⚠️  Erro ao contar pedidos: %v", err)
+		total = 0 // Não falhar por isso
+	}
+
+	log.Printf("✅ [ADMIN] Encontrados %d pedidos (total: %d)", len(orders), total)
 	return orders, total, nil
 }
 

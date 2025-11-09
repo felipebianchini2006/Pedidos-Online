@@ -232,6 +232,81 @@ func (h *OrderHandler) ListOrders(c *fiber.Ctx) error {
 	})
 }
 
+// ListAllOrders retorna TODOS os pedidos (admin) com paginação
+// GET /api/v1/admin/orders?page=1&page_size=10
+func (h *OrderHandler) ListAllOrders(c *fiber.Ctx) error {
+	// 1. Extrair userID e email do contexto
+	userID := middleware.GetUserID(c)
+	userEmail := middleware.GetUserEmail(c)
+
+	if userID == "" {
+		log.Printf("❌ Tentativa de listar pedidos sem autenticação")
+		return c.Status(fiber.StatusUnauthorized).JSON(ErrorResponse{
+			Success: false,
+			Error:   "Usuário não autenticado",
+			Message: "Token JWT ausente ou inválido",
+		})
+	}
+
+	// 2. Verificar se é admin
+	if userEmail != "admin@gmail.com" {
+		log.Printf("🚫 Usuário %s (%s) tentou acessar endpoint admin", userID, userEmail)
+		return c.Status(fiber.StatusForbidden).JSON(ErrorResponse{
+			Success: false,
+			Error:   "Acesso negado",
+			Message: "Apenas administradores podem acessar este recurso",
+		})
+	}
+
+	// 3. Parse query params com defaults
+	page := c.QueryInt("page", 1)
+	pageSize := c.QueryInt("page_size", 10)
+
+	// 4. Validar paginação
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 {
+		pageSize = 10
+	}
+	if pageSize > 100 {
+		pageSize = 100 // Máximo 100 itens por página
+	}
+
+	log.Printf("📋 [ADMIN] Listando TODOS os pedidos (page=%d, pageSize=%d)", page, pageSize)
+
+	// 5. Chamar service layer
+	orders, total, err := h.service.ListAllOrders(c.Context(), page, pageSize)
+	if err != nil {
+		log.Printf("❌ Erro ao listar pedidos: %v", err)
+		return c.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{
+			Success: false,
+			Error:   "Erro ao buscar pedidos",
+			Message: err.Error(),
+		})
+	}
+
+	// 6. Calcular total de páginas
+	totalPages := int64(0)
+	if total > 0 {
+		totalPages = (total + int64(pageSize) - 1) / int64(pageSize)
+	}
+
+	log.Printf("✅ [ADMIN] %d pedidos encontrados (total: %d)", len(orders), total)
+
+	// 7. Retornar 200 OK com lista paginada
+	return c.Status(fiber.StatusOK).JSON(OrderListResponse{
+		Success: true,
+		Data:    orders,
+		Pagination: Pagination{
+			Page:       page,
+			PageSize:   pageSize,
+			Total:      total,
+			TotalPages: totalPages,
+		},
+	})
+}
+
 // GetOrder retorna um pedido específico pelo ID
 // GET /api/v1/orders/:id
 func (h *OrderHandler) GetOrder(c *fiber.Ctx) error {
@@ -555,10 +630,16 @@ func RegisterRoutes(app *fiber.App, handler *OrderHandler, authMiddleware fiber.
 	orders.Put("/:id/status", handler.UpdateStatus) // Atualizar status (admin)
 	orders.Delete("/:id", handler.CancelOrder)      // Cancelar pedido (usuário)
 
+	// Rotas ADMIN
+	admin := app.Group("/api/v1/admin")
+	admin.Use(authMiddleware)
+	admin.Get("/orders", handler.ListAllOrders) // Listar TODOS os pedidos (admin)
+
 	log.Println("✅ Rotas do Order Service registradas:")
 	log.Println("   POST   /api/v1/orders           - Criar pedido")
 	log.Println("   GET    /api/v1/orders           - Listar pedidos")
 	log.Println("   GET    /api/v1/orders/:id       - Obter pedido")
 	log.Println("   PUT    /api/v1/orders/:id/status - Atualizar status")
 	log.Println("   DELETE /api/v1/orders/:id       - Cancelar pedido")
+	log.Println("   GET    /api/v1/admin/orders     - Listar todos os pedidos (admin)")
 }
