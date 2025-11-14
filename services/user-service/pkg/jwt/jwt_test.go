@@ -4,7 +4,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -160,24 +159,16 @@ func TestValidateToken(t *testing.T) {
 		assert.Nil(t, claims)
 	})
 
-	t.Run("error with wrong signing method", func(t *testing.T) {
-		// Create a token with RS256 instead of HS256
-		claims := JWTClaims{
-			UserID: userID,
-			Email:  email,
-			RegisteredClaims: jwt.RegisteredClaims{
-				ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
-			},
-		}
-
-		// This would require an RSA key, so we'll just test that our validator rejects it
-		// For now, we'll create a valid token and verify our method check works
+	t.Run("verify HMAC signing method is accepted", func(t *testing.T) {
+		// Create a valid token and verify our method check works with HMAC
 		validToken, _ := GenerateToken(userID, email, secret, 24*time.Hour)
 		result, err := ValidateToken(validToken, secret)
 
-		// This should succeed with HMAC
+		// This should succeed with HMAC (HS256)
 		require.NoError(t, err)
 		assert.NotNil(t, result)
+		assert.Equal(t, userID, result.UserID)
+		assert.Equal(t, email, result.Email)
 	})
 }
 
